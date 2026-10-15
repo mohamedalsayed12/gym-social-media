@@ -8,14 +8,15 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
     )
 
-    database_hostname: str
-    database_port: str
-    database_password: str
-    database_name: str
-    database_username: str
+    database_url: str | None = None
+    database_hostname: str | None = None
+    database_port: int | None = None
+    database_password: str | None = None
+    database_name: str | None = None
+    database_username: str | None = None
     secret_key: str
-    algorithm: str
-    access_token_expire_minutes: int
+    algorithm: str = "HS256"
+    access_token_expire_minutes: int = 30
 
 
 settings = Settings()
