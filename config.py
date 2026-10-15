@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=Path(__file__).with_name(".env"),
         env_file_encoding="utf-8",
+        extra="ignore",
     )
 
     database_url: str | None = None
