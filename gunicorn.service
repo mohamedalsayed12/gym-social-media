@@ -1,5 +1,5 @@
 [Unit]
-Description=gunicorn instance to serve api
+Description=music social media FastAPI application
 After=network.target
 
 [Service]
@@ -7,6 +7,7 @@ User=fastapi
 Group=fastapi
 WorkingDirectory=/home/fastapi/app
 Environment="PATH=/home/fastapi/app/.venv/bin"
+EnvironmentFile=/home/fastapi/app/.env
 ExecStart=/home/fastapi/app/.venv/bin/gunicorn -w 1 -k uvicorn.workers.UvicornWorker main:app --bind 127.0.0.1:8000
 Restart=on-failure
 
