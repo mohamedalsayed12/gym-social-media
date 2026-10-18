@@ -17,6 +17,21 @@ def test_get_all_posts(authorized_client, test_posts):
     )
 
 
+def test_get_posts_pagination(authorized_client, test_posts):
+    res = authorized_client.get("/posts/?limit=1&skip=1")
+    assert res.status_code == 200
+    assert len(res.json()) == 1
+    assert res.json()[0]["Post"]["id"] == sorted(
+        (post.id for post in test_posts), reverse=True
+    )[1]
+
+
+@pytest.mark.parametrize("query", ["limit=0", "limit=101", "skip=-1"])
+def test_get_posts_rejects_invalid_pagination(authorized_client, query):
+    res = authorized_client.get(f"/posts/?{query}")
+    assert res.status_code == 422
+
+
 def test_unauthorized_user_get_all_posts(client, test_posts):
     res = client.get("/posts/")
     assert res.status_code == 401

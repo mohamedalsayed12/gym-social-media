@@ -1,20 +1,26 @@
 from fastapi.testclient import TestClient
 from main import app
-from uuid import uuid4
+import os
 from sqlalchemy import create_engine
-from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy.engine import make_url
+from sqlalchemy.orm import sessionmaker
 from config import settings
-from database import get_db
-from database import Base
+from database import Base, build_database_url, get_db
 import pytest
 from oauth2 import create_access_token
 import models
-SQLALCHEMY_DATABASE_URL = (
-    f"postgresql+psycopg2://{settings.database_username}:{settings.database_password}@"
-    f"{settings.database_hostname}:{settings.database_port}/{settings.database_name}_test"
-)
+def build_test_database_url():
+    explicit_url = os.getenv("TEST_DATABASE_URL")
+    url = make_url(explicit_url) if explicit_url else build_database_url(settings)
+    if url.drivername in {"postgres", "postgresql"}:
+        url = url.set(drivername="postgresql+psycopg2")
+    if not explicit_url and url.database:
+        url = url.set(database=f"{url.database}_test")
+    if not url.database or not url.database.endswith("_test"):
+        raise ValueError("Test database name must end with '_test'")
+    return url
 
-engine = create_engine(SQLALCHEMY_DATABASE_URL)
+engine = create_engine(build_test_database_url())
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 @pytest.fixture()
@@ -45,7 +51,7 @@ def client(session):
 
 @pytest.fixture
 def test_user(client):
-    user_data = {"email": "sanjeev@gmail.com", "password": "password123"}
+    user_data = {"email": "user@example.com", "password": "password123"}
     res = client.post("/users/", json=user_data)
     assert res.status_code==201
     print(res.json())
