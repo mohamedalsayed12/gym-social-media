@@ -2,11 +2,45 @@ name: Build and Deploy Code
 
 on: [push, pull_request]
 
+env:
+  DATABASE_HOSTNAME: localhost
+  DATABASE_PORT: '5432'
+  DATABASE_PASSWORD: postgres
+  DATABASE_NAME: fastapi
+  DATABASE_USERNAME: postgres
+  SECRET_KEY: ci-test-only-secret-key
+  ALGORITHM: HS256
+  ACCESS_TOKEN_EXPIRE_MINUTES: '30'
+
 jobs:
   job1:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: fastapi_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d fastapi_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - name: pulling git repo
         uses: actions/checkout@v2
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+      - name: update pip
+        run: python -m pip install --upgrade pip
+      - name: install dependencies
+        run: python -m pip install -r requirements.txt
+      - name: test with pytest
+        run: python -m pytest -q
       - name: say hi to  Mohammed
         run: echo "hello Mohammed"
