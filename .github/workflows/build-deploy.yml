@@ -41,8 +41,9 @@ jobs:
         run: python -m pip install -r requirements.txt
       - name: test with pytest
         run: python -m pytest -q
+  # Enable this job after adding a Docker Hub token with push permission.
   publish_image:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.PUBLISH_DOCKER_IMAGE == 'true'
     runs-on: ubuntu-latest
     environment: production
     needs: [build]
