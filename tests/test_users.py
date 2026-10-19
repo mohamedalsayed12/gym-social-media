@@ -66,14 +66,14 @@ def test_login_user(client, test_user):
         settings.secret_key,
         algorithms=[settings.algorithm],
     )
-    id = (payload.get("user_id"))
+    assert payload.get("user_id") == test_user["id"]
     assert res.status_code == 200
 
 
 @pytest.mark.parametrize("email, password, status_code", [
-    ("wrongemail@example.com", "password123", 403),
-    ("user@example.com", "wrongpassword", 403),
-    ("wrongemail@example.com", "wrongpassword", 403),
+    ("wrongemail@example.com", "password123", 401),
+    ("user@example.com", "wrongpassword", 401),
+    ("wrongemail@example.com", "wrongpassword", 401),
     (None, "password123", 422),
     ("user@example.com", None, 422),
 ])

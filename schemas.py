@@ -23,14 +23,9 @@ class UserOut(BaseModel):
 class Post(PostBase):
     id:int
     created_at: datetime
-    owner_id:int | None
-    owner:UserOut | None
+    owner_id: int
+    owner: UserOut
     model_config = ConfigDict(from_attributes=True)
-
-
-class PostWithVotes(BaseModel):
-    post: Post
-    votes: int
 
 
 class PostOut(BaseModel):

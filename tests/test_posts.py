@@ -1,3 +1,4 @@
+import models
 import schemas
 import pytest 
 
@@ -134,3 +135,49 @@ def test_unauthorized_user_update_post(client, test_user, test_posts):
     assert res.status_code == 401
 
 
+
+
+@pytest.fixture
+def other_users_draft(test_user2, session):
+    draft = models.Post(
+        title="secret plan", content="not ready", published=False, owner_id=test_user2["id"]
+    )
+    session.add(draft)
+    session.commit()
+    session.refresh(draft)
+    return draft
+
+
+def test_other_users_drafts_are_hidden_from_list(authorized_client, test_posts, other_users_draft):
+    res = authorized_client.get("/posts/?limit=100")
+    assert res.status_code == 200
+    ids = [item["Post"]["id"] for item in res.json()]
+    assert other_users_draft.id not in ids
+    assert len(ids) == len(test_posts)
+
+
+def test_other_users_draft_returns_404(authorized_client, other_users_draft):
+    assert authorized_client.get(f"/posts/{other_users_draft.id}").status_code == 404
+
+
+def test_owner_can_see_own_draft(authorized_client, test_user, session):
+    draft = models.Post(title="my draft", content="wip", published=False, owner_id=test_user["id"])
+    session.add(draft)
+    session.commit()
+    assert authorized_client.get(f"/posts/{draft.id}").status_code == 200
+    ids = [item["Post"]["id"] for item in authorized_client.get("/posts/?limit=100").json()]
+    assert draft.id in ids
+
+
+def test_cannot_vote_on_other_users_draft(authorized_client, other_users_draft):
+    res = authorized_client.post("/vote/", json={"post_id": other_users_draft.id, "dir": 1})
+    assert res.status_code == 404
+
+
+def test_search_is_case_insensitive(authorized_client, test_posts):
+    res = authorized_client.get("/posts/?search=FIRST")
+    assert [item["Post"]["title"] for item in res.json()] == ["first title"]
+
+
+def test_search_treats_wildcards_literally(authorized_client, test_posts):
+    assert authorized_client.get("/posts/?search=%25").json() == []
