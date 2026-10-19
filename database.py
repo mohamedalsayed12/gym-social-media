@@ -1,10 +1,6 @@
-import time
-import psycopg2
-from psycopg2.extras import RealDictCursor
 from sqlalchemy import create_engine
 from sqlalchemy.engine import URL, make_url
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import declarative_base, sessionmaker
 from config import settings
 
 def build_database_url(config) -> URL:
