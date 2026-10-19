@@ -1,5 +1,7 @@
-__pycache__
+__pycache__/
 venv/
 .venv/
 .env
-touch.env
+.idea/
+.vscode/
+.pytest_cache/

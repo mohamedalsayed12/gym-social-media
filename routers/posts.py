@@ -18,7 +18,6 @@ def get_posts(
     skip: int = Query(default=0, ge=0),
     search: Optional[str] = "",
 ):
-    print(current_user.email)
     results = (
         db.query(models.Post, func.count(models.Vote.post_id).label("votes"))
         .join(models.Vote, models.Vote.post_id == models.Post.id, isouter=True)
@@ -55,7 +54,6 @@ def get_post(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
-    print(current_user.email)
     result = (
         db.query(models.Post, func.count(models.Vote.post_id).label("votes"))
         .join(models.Vote, models.Vote.post_id == models.Post.id, isouter=True)
@@ -80,7 +78,6 @@ def delete_post(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
-    print(current_user.email)
     post_query = db.query(models.Post).filter(models.Post.id == id)
     post = post_query.first()
 
@@ -108,7 +105,6 @@ def update_post(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
-    print(current_user.email)
     post_query = db.query(models.Post).filter(models.Post.id == id)
     post = post_query.first()
     if post is None:
