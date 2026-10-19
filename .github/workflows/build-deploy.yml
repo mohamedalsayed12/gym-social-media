@@ -89,7 +89,10 @@ jobs:
           printf '%s\n' "$DROPLET_SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H "$DROPLET_HOST" >> ~/.ssh/known_hosts
-          ssh -i ~/.ssh/deploy_key "$DROPLET_USER@$DROPLET_HOST" 'bash /home/fastapi/app/deploy/deploy.sh'
+          # Update the code first so the server always runs the deploy script from main,
+          # including on the very first deploy, before deploy.sh exists on the droplet.
+          ssh -i ~/.ssh/deploy_key "$DROPLET_USER@$DROPLET_HOST" \
+            'cd /home/fastapi/app && git fetch --quiet origin main && git reset --hard origin/main && bash deploy/deploy.sh'
       - name: Check the live API responds
         run: |
           for attempt in 1 2 3 4 5; do

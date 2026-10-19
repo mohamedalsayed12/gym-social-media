@@ -1,16 +1,13 @@
 #!/usr/bin/env bash
-# Runs on the droplet. Pulls main, installs dependencies, migrates the
-# database and restarts the API. Called by the GitHub Actions deploy job.
+# Runs on the droplet after the deploy job has checked out origin/main.
+# Installs dependencies, migrates the database and restarts the API.
+# Settings come from .env, which config.py loads itself.
 set -euo pipefail
 
 APP_DIR=/home/fastapi/app
 cd "$APP_DIR"
 
-git fetch --quiet origin main
-git reset --hard origin/main
-
 .venv/bin/pip install --quiet -r requirements.txt
-set -a; . ./.env; set +a
 .venv/bin/alembic upgrade head
 
 sudo /usr/bin/systemctl restart gunicorn
