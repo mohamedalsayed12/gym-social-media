@@ -7,7 +7,14 @@ from routers import follows, posts, users, workouts
 
 origins = ["*"]
 
-app = FastAPI()
+app = FastAPI(
+    title="Gym Social Media API",
+    description=(
+        "Backend for a gym social app: log workouts, track personal records, "
+        "follow other lifters, and post and vote on updates."
+    ),
+    version="1.1.0",
+)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,

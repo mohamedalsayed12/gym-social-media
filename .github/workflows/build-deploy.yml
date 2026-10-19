@@ -65,29 +65,36 @@ jobs:
           file: ./Dockerfile
           builder: ${{ steps.buildx.outputs.name }}
           push: true
-          tags: ${{ secrets.DOCKER_HUB_USERNAME }}/musicsocialmedia:latest
+          tags: ${{ secrets.DOCKER_HUB_USERNAME }}/gymsocialmedia:latest
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache
       - name: Image digest
         run: echo "${{ steps.docker_build.outputs.digest }}"
   deploy:
+    # Deploys main to the DigitalOcean droplet that serves the live API.
+    # Needs repository secrets DROPLET_HOST, DROPLET_USER and DROPLET_SSH_KEY.
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: deployment
     needs: [build]
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Install Heroku CLI
-        run: curl -fsSL https://cli-assets.heroku.com/install.sh | sh
-      - name: Deploy to Heroku
+      - name: Deploy to droplet over SSH
         env:
-          HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
-          HEROKU_EMAIL: ${{ secrets.HEROKU_EMAIL }}
+          DROPLET_HOST: ${{ secrets.DROPLET_HOST }}
+          DROPLET_USER: ${{ secrets.DROPLET_USER }}
+          DROPLET_SSH_KEY: ${{ secrets.DROPLET_SSH_KEY }}
         run: |
-          test -n "$HEROKU_API_KEY"
-          test -n "$HEROKU_EMAIL"
-          heroku git:remote --app music4u
-          git push heroku HEAD:main
+          test -n "$DROPLET_HOST" && test -n "$DROPLET_USER" && test -n "$DROPLET_SSH_KEY"
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DROPLET_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$DROPLET_HOST" >> ~/.ssh/known_hosts
+          ssh -i ~/.ssh/deploy_key "$DROPLET_USER@$DROPLET_HOST" 'bash /home/fastapi/app/deploy/deploy.sh'
+      - name: Check the live API responds
+        run: |
+          for attempt in 1 2 3 4 5; do
+            curl -fsS https://api.music4u.world/openapi.json | grep -q '/workouts/' && exit 0
+            sleep 5
+          done
+          echo "Live API did not expose the latest endpoints" >&2
+          exit 1

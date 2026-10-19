@@ -1,7 +1,7 @@
 services:
   web:
     build: .
-    image: mohammed20051234/musicsocialmedia:latest
+    image: mohammed20051234/gymsocialmedia:latest
     pull_policy: build
     depends_on:
       postgres:
