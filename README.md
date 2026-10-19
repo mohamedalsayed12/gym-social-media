@@ -1,6 +1,6 @@
-# Music Social Media API
+# Gym Social Media API
 
-A small social feed backend built with FastAPI. People can create accounts, sign in, publish posts, and vote on posts. There is no frontend yet, but you can explore the API through FastAPI's interactive docs.
+A small social feed backend built with FastAPI as a foundation for a gym community. People can create accounts, sign in, publish posts, and vote on posts. There is no frontend yet, but you can explore the API through FastAPI's interactive docs.
 
 The interesting part is how the pieces fit together: users own their posts, votes belong to individual users, and the database enforces those relationships.
 
@@ -46,4 +46,4 @@ The test fixtures recreate the application's tables, so never point `TEST_DATABA
 
 `routers/` handles posts and users, `auth.py` handles login, and `vote.py` handles voting. `schemas.py` defines request and response shapes. `models.py` and `database.py` contain the SQLAlchemy models and session setup; `alembic/` holds database migrations. `tests/` covers authentication, post ownership, pagination, and voting.
 
-This is a backend project in its current form. A frontend or a more specific community theme can be built on top of the API.
+This is a backend project in its current form. A frontend and gym-specific features can be built on top of the API.
