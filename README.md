@@ -1,8 +1,8 @@
 # Gym Social Media API
 
-I'm building this as the backend for a gym-focused social app. Right now it's a post-and-vote API: people can create accounts, sign in, publish posts, and vote. There isn't a frontend or gym-specific content yet, but you can try the API through FastAPI's interactive docs.
+I'm building this as the backend for a gym-focused social app. People can log their workouts, track their personal records, follow other lifters, and post and vote on updates. There isn't a frontend yet, but you can try everything through FastAPI's interactive docs.
 
-I focused on getting the relationships right. Users can only change their own posts, votes belong to individual users, and the database enforces those links.
+I focused on getting the relationships right. Users can only change their own posts and workouts, votes and follows belong to individual users, and the database enforces those links. Follows use a composite primary key, so the same follow can't be stored twice, and a check constraint stops people following themselves.
 
 ## What works so far
 
@@ -11,6 +11,9 @@ I focused on getting the relationships right. Users can only change their own po
 - Lets signed-in users create, search, list, update, and delete posts. A user can only change or delete their own posts.
 - Lets users vote once per post and remove their own vote. Post responses include vote counts.
 - Supports pagination on the post list with `limit` and `skip`.
+- Logs workouts with their exercises, sets, reps and weight. Exercise names are normalised, so "bench press" and "Bench  Press" count as the same lift.
+- Works out personal records per exercise (`GET /workouts/records`): the heaviest set, with more reps winning a tie. It's calculated from the logged sets with a window function rather than stored separately, so it can't drift out of date.
+- Lets users follow each other, shows follower and following counts, and builds a feed (`GET /feed`) of published posts from the people you follow.
 
 When the app is running, FastAPI's interactive docs are at `/docs`.
 
@@ -44,6 +47,6 @@ The test fixtures recreate the application's tables, so don't use a database wit
 
 ## How I organised the code
 
-I kept the main pieces separate: `routers/` handles posts and users, `auth.py` handles login, and `vote.py` handles voting. `schemas.py` defines the request and response shapes. The SQLAlchemy models and sessions live in `models.py` and `database.py`, migrations live in `alembic/`, and `tests/` covers authentication, post ownership, pagination, and voting.
+I kept the main pieces separate: `routers/` handles posts, users, workouts and follows, `auth.py` handles login, and `vote.py` handles voting. `schemas.py` defines the request and response shapes. The SQLAlchemy models and sessions live in `models.py` and `database.py`, migrations live in `alembic/`, and `tests/` covers authentication, post ownership, pagination, voting, workouts, personal records, follows and the feed.
 
-This is still a backend project. The next step is a frontend and features specific to a gym community.
+This is still a backend project. The next step is a frontend.
