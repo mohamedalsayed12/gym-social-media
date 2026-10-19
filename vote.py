@@ -5,6 +5,7 @@ import database
 import models
 import oauth2
 import schemas
+from routers.posts import visible_to
 
 
 router = APIRouter(prefix="/vote", tags=["Vote"])
@@ -29,7 +30,12 @@ def vote(
                 detail=f"user {current_user.id} has already voted on post {vote.post_id}",
             )
 
-        if db.query(models.Post.id).filter(models.Post.id == vote.post_id).first() is None:
+        post_is_visible = (
+            db.query(models.Post.id)
+            .filter(models.Post.id == vote.post_id, visible_to(current_user))
+            .first()
+        )
+        if post_is_visible is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Post does not exist",
