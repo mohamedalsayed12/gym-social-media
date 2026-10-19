@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 import models
 import schemas
@@ -10,6 +10,11 @@ from typing import Optional
 router = APIRouter(prefix="/posts",
                    tags=["posts"])
 
+
+def visible_to(user: models.User):
+    """Published posts are public; drafts are only visible to their owner."""
+    return or_(models.Post.published.is_(True), models.Post.owner_id == user.id)
+
 @router.get("/", response_model=list[schemas.PostOut])
 def get_posts(
     db: Session = Depends(get_db),
@@ -18,12 +23,12 @@ def get_posts(
     skip: int = Query(default=0, ge=0),
     search: Optional[str] = "",
 ):
-    print(current_user.email)
     results = (
         db.query(models.Post, func.count(models.Vote.post_id).label("votes"))
         .join(models.Vote, models.Vote.post_id == models.Post.id, isouter=True)
+        .filter(visible_to(current_user))
+        .filter(models.Post.title.icontains(search, autoescape=True))
         .group_by(models.Post.id)
-        .filter(models.Post.title.contains(search))
         .order_by(models.Post.id.desc())
         .limit(limit)
         .offset(skip)
@@ -55,11 +60,10 @@ def get_post(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
-    print(current_user.email)
     result = (
         db.query(models.Post, func.count(models.Vote.post_id).label("votes"))
         .join(models.Vote, models.Vote.post_id == models.Post.id, isouter=True)
-        .filter(models.Post.id == id)
+        .filter(models.Post.id == id, visible_to(current_user))
         .group_by(models.Post.id)
         .first()
     )
@@ -80,7 +84,6 @@ def delete_post(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
-    print(current_user.email)
     post_query = db.query(models.Post).filter(models.Post.id == id)
     post = post_query.first()
 
@@ -108,7 +111,6 @@ def update_post(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
-    print(current_user.email)
     post_query = db.query(models.Post).filter(models.Post.id == id)
     post = post_query.first()
     if post is None:
