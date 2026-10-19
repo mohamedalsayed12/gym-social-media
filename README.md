@@ -1,10 +1,10 @@
 # Gym Social Media API
 
-A small social feed backend built with FastAPI as a foundation for a gym community. People can create accounts, sign in, publish posts, and vote on posts. There is no frontend yet, but you can explore the API through FastAPI's interactive docs.
+I'm building this as the backend for a gym-focused social app. Right now it's a post-and-vote API: people can create accounts, sign in, publish posts, and vote. There isn't a frontend or gym-specific content yet, but you can try the API through FastAPI's interactive docs.
 
-The interesting part is how the pieces fit together: users own their posts, votes belong to individual users, and the database enforces those relationships.
+I focused on getting the relationships right. Users can only change their own posts, votes belong to individual users, and the database enforces those links.
 
-## What it does
+## What works so far
 
 - Registers users and hashes their passwords before storing them.
 - Issues JWT access tokens through `POST /login`.
@@ -12,15 +12,15 @@ The interesting part is how the pieces fit together: users own their posts, vote
 - Lets users vote once per post and remove their own vote. Post responses include vote counts.
 - Supports pagination on the post list with `limit` and `skip`.
 
-FastAPI serves interactive API documentation at `/docs` when the app is running.
+When the app is running, FastAPI's interactive docs are at `/docs`.
 
-## Built with
+## Stack
 
-FastAPI, Pydantic, SQLAlchemy, PostgreSQL, Alembic, pytest, Docker, and GitHub Actions. The repository also contains a Heroku deployment workflow.
+I used FastAPI, Pydantic, SQLAlchemy, PostgreSQL, and Alembic for the API and database. I added pytest tests, Docker setup, and GitHub Actions. There's also a Heroku deployment workflow in the repo.
 
-## Run with Docker
+## Run it locally
 
-Create an ignored `.env` file in the project root with `DATABASE_PASSWORD` and a long random `SECRET_KEY`. The database name, username, token algorithm, and token lifetime use the defaults in `docker-compose.prod.yaml` unless you set them explicitly.
+Create an ignored `.env` file in the project root with `DATABASE_PASSWORD` and a long random `SECRET_KEY`. You can leave the database name, username, token algorithm, and token lifetime at the defaults in `docker-compose.prod.yaml`, or set them yourself.
 
 Then run:
 
@@ -29,21 +29,21 @@ docker compose -f docker-compose.prod.yaml up -d --build
 docker compose -f docker-compose.prod.yaml exec web alembic upgrade head
 ```
 
-The API will be at `http://localhost:8000`, with documentation at `http://localhost:8000/docs`. The compose file starts PostgreSQL alongside the API and keeps database records in a named volume.
+The API then runs at `http://localhost:8000`, and you can try it at `http://localhost:8000/docs`. Compose also starts PostgreSQL and keeps its data in a named volume.
 
 ## Run the tests
 
-Tests need a **separate PostgreSQL database** whose name ends in `_test`. Make sure your local configuration also points to a reachable PostgreSQL server, set `TEST_DATABASE_URL` to the separate database's connection URL, then run:
+The tests need a **separate PostgreSQL database** with a name ending in `_test`. Make sure PostgreSQL is reachable, set `TEST_DATABASE_URL` to that test database, then run:
 
 ```bash
 python -m pip install -r requirements.txt
 python -m pytest -q
 ```
 
-The test fixtures recreate the application's tables, so never point `TEST_DATABASE_URL` at a database containing data you want to keep. GitHub Actions starts its own PostgreSQL service and runs the suite on every push and pull request.
+The test fixtures recreate the application's tables, so don't use a database with data you want to keep. GitHub Actions starts its own PostgreSQL service and runs the tests on every push and pull request.
 
-## How the code is organised
+## How I organised the code
 
-`routers/` handles posts and users, `auth.py` handles login, and `vote.py` handles voting. `schemas.py` defines request and response shapes. `models.py` and `database.py` contain the SQLAlchemy models and session setup; `alembic/` holds database migrations. `tests/` covers authentication, post ownership, pagination, and voting.
+I kept the main pieces separate: `routers/` handles posts and users, `auth.py` handles login, and `vote.py` handles voting. `schemas.py` defines the request and response shapes. The SQLAlchemy models and sessions live in `models.py` and `database.py`, migrations live in `alembic/`, and `tests/` covers authentication, post ownership, pagination, and voting.
 
-This is a backend project in its current form. A frontend and gym-specific features can be built on top of the API.
+This is still a backend project. The next step is a frontend and features specific to a gym community.
