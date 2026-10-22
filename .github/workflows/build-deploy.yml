@@ -74,3 +74,83 @@ jobs:
           cache-to: type=local,dest=/tmp/.buildx-cache
       - name: Image digest
         run: echo "${{ steps.docker_build.outputs.digest }}"
+
+  build_frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      # The API is served under /api on the same domain (see deploy/nginx.conf).
+      - run: npm run build
+        env:
+          VITE_API_URL: /api
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+          retention-days: 7
+
+  deploy:
+    # Deploys main to the DigitalOcean droplet. Needs repository secrets
+    # DROPLET_HOST, DROPLET_USER and DROPLET_SSH_KEY (see DEPLOY.md).
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [build, build_frontend]
+    runs-on: ubuntu-latest
+    environment: deployment
+    concurrency: deploy-droplet
+    env:
+      DROPLET_HOST: ${{ secrets.DROPLET_HOST }}
+      DROPLET_USER: ${{ secrets.DROPLET_USER }}
+      DROPLET_SSH_KEY: ${{ secrets.DROPLET_SSH_KEY }}
+      SITE_URL: https://api.music4u.world
+    steps:
+      - name: Check deploy settings
+        run: |
+          missing=""
+          for name in DROPLET_HOST DROPLET_USER DROPLET_SSH_KEY; do
+            [ -n "${!name}" ] || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "Missing GitHub secrets:$missing. See DEPLOY.md." >&2
+            exit 1
+          fi
+      - uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend-dist
+      - name: Set up SSH
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DROPLET_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$DROPLET_HOST" >> ~/.ssh/known_hosts
+      - name: Update the code on the droplet
+        run: |
+          ssh -i ~/.ssh/deploy_key "$DROPLET_USER@$DROPLET_HOST" \
+            'cd /home/fastapi/app && git fetch --quiet origin main && git reset --hard origin/main'
+      - name: Copy the built frontend
+        run: |
+          rsync -az --delete -e "ssh -i ~/.ssh/deploy_key" \
+            frontend-dist/ "$DROPLET_USER@$DROPLET_HOST:/home/fastapi/app/frontend-dist.new/"
+      - name: Back up, migrate and restart
+        run: ssh -i ~/.ssh/deploy_key "$DROPLET_USER@$DROPLET_HOST" 'bash /home/fastapi/app/deploy/deploy.sh'
+      - name: Check the live site
+        run: |
+          for attempt in 1 2 3 4 5; do
+            if curl -fsS "$SITE_URL/openapi.json" | grep -q '"/workouts' \
+              && curl -fsS "$SITE_URL/" | grep -qi '<div id="root"'; then
+              echo "Live: $SITE_URL"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "The live site is not serving the new API and frontend." >&2
+          exit 1
