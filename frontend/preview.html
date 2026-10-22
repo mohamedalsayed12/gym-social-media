@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LIFTLOG</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./src/styles.css" />
+    <style>
+      .view { display: none; }
+      .view.active { display: block; }
+      .phone { width: min(390px, 100%); height: min(820px, 100dvh); min-height: 640px; }
+    </style>
+  </head>
+  <body>
+    <div class="stage">
+      <div class="phone">
+        <header class="appbar" id="appbar"><p class="wordmark">LIFTLOG</p></header>
+        <div class="screen">
+          <section class="view active" id="feed" data-title="feed">
+            <div class="tabs" id="feed-tabs">
+              <button type="button" data-tab="following">Following</button>
+              <button type="button" data-tab="discover" class="active">Discover</button>
+              <button type="button" data-tab="prs">PRs only</button>
+            </div>
+            <button class="linkish" type="button" data-screen="communities">Communities</button>
+            <article class="card" data-scopes="following discover prs">
+              <div class="person">
+                <span class="avatar">SJ</span>
+                <span><strong>sara_lifts</strong> <span class="muted">· 28 min</span></span>
+              </div>
+              <h2 class="session-title">Leg day</h2>
+              <div class="post-photo" role="img" aria-label="Leg day photo"></div>
+              <div class="stats-row"><span>8,420 kg</span><span>4 exercises</span></div>
+              <p class="set-line"><span>Back squat</span><span>5 × 140</span></p>
+              <p class="set-line"><span>Romanian deadlift</span><span>8 × 90</span></p>
+              <p class="set-line"><span>Leg press</span><span>12 × 180</span></p>
+              <button class="heart liked" type="button" data-likes="34">♥ 34</button>
+            </article>
+            <article class="card" data-scopes="discover">
+              <div class="person">
+                <span class="avatar">JT</span>
+                <span><strong>jt_strength</strong> <span class="muted">· 2h</span></span>
+              </div>
+              <h2 class="session-title">Push day</h2>
+              <div class="stats-row"><span>6,150 kg</span><span>3 exercises</span></div>
+              <p class="set-line"><span>Bench press</span><span>5 × 100</span></p>
+              <p class="set-line"><span>Overhead press</span><span>6 × 60</span></p>
+              <button class="heart" type="button" data-likes="12">♡ 12</button>
+            </article>
+            <p class="empty" id="feed-empty" hidden>No sessions on this tab yet.</p>
+          </section>
+
+          <section class="view" id="log">
+            <div class="logger-top">
+              <button class="icon-btn" type="button" data-screen="feed" aria-label="Close">×</button>
+              <div class="elapsed"><span>Elapsed</span><strong>00:42:18</strong></div>
+              <button class="finish" type="button" data-screen="feed">Finish</button>
+            </div>
+            <p class="muted" style="margin:0">Workout name</p>
+            <p class="name-input" style="margin:0 0 12px">Push Day</p>
+            <div id="exercise-list">
+              <section class="card">
+                <strong>Bench press</strong>
+                <p class="muted">Best: 85 kg × 6</p>
+                <table class="set-table">
+                  <thead><tr><th>Set</th><th>kg</th><th>Reps</th><th>Done</th></tr></thead>
+                  <tbody>
+                    <tr><td>1</td><td>80</td><td>8</td><td><input class="check" type="checkbox" checked /></td></tr>
+                    <tr><td>2</td><td>85</td><td>6</td><td><input class="check" type="checkbox" checked /></td></tr>
+                    <tr><td>3</td><td>90</td><td>4</td><td><input class="check" type="checkbox" /></td></tr>
+                  </tbody>
+                </table>
+                <button class="linkish" type="button" data-add-set>+ Add set</button>
+              </section>
+              <section class="card">
+                <strong>Overhead press</strong>
+                <p class="empty">No sets logged yet</p>
+                <button class="linkish" type="button" data-add-set>+ Add set</button>
+              </section>
+            </div>
+            <button class="btn" type="button" id="add-exercise">+ Add exercise</button>
+            <input id="camera" type="file" accept="image/*" capture="environment" hidden />
+            <button class="linkish" type="button" id="add-photo">+ Add photo</button>
+            <img class="post-photo off" id="log-photo" alt="Workout photo" />
+          </section>
+
+          <section class="view" id="profile">
+            <main class="center">
+              <div class="avatar lg">MK</div>
+              <h1 class="profile-name">mohamed</h1>
+              <p class="handle">@mohamed</p>
+              <p class="muted">70 kg · 178 cm</p>
+              <div class="stat-grid">
+                <div><strong>48</strong><span>Workouts</span></div>
+                <div><strong>6</strong><span>PRs this month</span></div>
+                <div><strong>12</strong><span>Following</span></div>
+              </div>
+              <div class="rank-card">
+                <strong>88th percentile</strong>
+                <span>#4 of 128 lifters</span>
+                <span>Strength per kg, adjusted for height</span>
+              </div>
+              <button class="btn slim" type="button" data-screen="communities">Communities</button>
+              <button class="btn slim" type="button" id="edit-profile">Edit profile</button>
+              <div class="card off" id="account" style="text-align:left;margin-top:16px">
+                <p class="muted">mohamed@example.com</p>
+                <button class="btn" type="button" data-screen="login">Log out</button>
+              </div>
+              <section style="text-align:left;margin-top:22px">
+                <div class="section-head">
+                  <h2 class="section-label">This week</h2>
+                  <span class="muted">Share of hits</span>
+                </div>
+                <div class="body-map">
+                  <svg viewBox="0 0 200 430" role="img" aria-label="Body muscle split this week">
+                    <circle cx="100" cy="36" r="24" fill="#2a2d34"></circle>
+                    <rect x="88" y="58" width="24" height="18" rx="6" fill="#2a2d34"></rect>
+                    <path d="M58 92 Q100 78 142 92 L150 118 Q100 108 50 118 Z" fill="rgba(198, 241, 53, 0.45)"></path>
+                    <path d="M68 112 H132 Q136 150 128 168 H72 Q64 150 68 112 Z" fill="rgba(198, 241, 53, 0.7)"></path>
+                    <path d="M74 172 H126 L120 230 H80 Z" fill="#24272e"></path>
+                    <path d="M46 116 Q28 150 34 210 Q48 214 54 180 L62 124 Z" fill="rgba(198, 241, 53, 0.35)"></path>
+                    <path d="M154 116 Q172 150 166 210 Q152 214 146 180 L138 124 Z" fill="rgba(198, 241, 53, 0.35)"></path>
+                    <path d="M78 236 H98 L92 390 Q84 400 76 390 L70 250 Z" fill="rgba(198, 241, 53, 1)"></path>
+                    <path d="M102 236 H122 L130 250 L124 390 Q116 400 108 390 Z" fill="rgba(198, 241, 53, 1)"></path>
+                    <path d="M70 118 H130 L124 150 H76 Z" fill="rgba(198, 241, 53, 0.55)" opacity="0.55"></path>
+                  </svg>
+                  <ul>
+                    <li><span class="swatch" style="background:rgba(198, 241, 53, 0.45)"></span><span>shoulders</span><strong>15%</strong></li>
+                    <li><span class="swatch" style="background:rgba(198, 241, 53, 0.7)"></span><span>chest</span><strong>25%</strong></li>
+                    <li><span class="swatch" style="background:rgba(198, 241, 53, 0.55)"></span><span>back</span><strong>15%</strong></li>
+                    <li><span class="swatch" style="background:rgba(198, 241, 53, 0.35)"></span><span>arms</span><strong>10%</strong></li>
+                    <li><span class="swatch" style="background:#24272e"></span><span>core</span><strong>0%</strong></li>
+                    <li><span class="swatch" style="background:rgba(198, 241, 53, 1)"></span><span>legs</span><strong>35%</strong></li>
+                  </ul>
+                </div>
+              </section>
+              <section style="text-align:left;margin-top:8px">
+                <div class="section-head">
+                  <h2 class="section-label">Volume</h2>
+                  <span class="muted">By muscle</span>
+                </div>
+                <div class="bar-row"><span>Legs</span><div class="bar"><span style="width:100%"></span></div><span>8.4t</span></div>
+                <div class="bar-row"><span>Chest</span><div class="bar"><span style="width:72%"></span></div><span>6.1t</span></div>
+                <div class="bar-row"><span>Back</span><div class="bar"><span style="width:54%"></span></div><span>4.5t</span></div>
+              </section>
+              <section style="text-align:left;margin-top:18px">
+                <div class="section-head">
+                  <h2 class="section-label">Personal records</h2>
+                  <span class="muted">Lift ÷ bodyweight × height</span>
+                </div>
+                <div class="record">
+                  <div class="record-main"><span>Back squat</span><strong>140 × 5</strong></div>
+                  <small>#8 of 40 · 84th percentile</small>
+                </div>
+                <div class="record">
+                  <div class="record-main"><span>Bench press</span><strong>100 × 5</strong></div>
+                  <small>#11 of 90 · 88th percentile</small>
+                </div>
+                <div class="record">
+                  <div class="record-main"><span>Deadlift</span><strong>180 × 3</strong></div>
+                  <small>#3 of 36 · 92nd percentile</small>
+                </div>
+              </section>
+            </main>
+          </section>
+
+          <section class="view" id="communities">
+            <h1 class="section-label">Communities</h1>
+            <p class="muted">Join a group. Your rank there is only against its members.</p>
+            <form class="card" id="new-community">
+              <label>New community<input name="name" placeholder="Hyrox" required /></label>
+              <button class="btn" type="submit">Create community</button>
+            </form>
+            <div id="community-list">
+              <article class="card community" data-slug="bodybuilding">
+                <strong>Bodybuilding</strong>
+                <p class="muted">Hypertrophy, physique, and stage prep.</p>
+                <p class="muted">128 members</p>
+                <p class="community-rank" hidden>92nd percentile · #2 of 40</p>
+                <button class="btn slim" type="button" data-join>Join</button>
+              </article>
+              <article class="card community" data-slug="pilates">
+                <strong>Pilates</strong>
+                <p class="muted">Control, core, and mobility.</p>
+                <p class="muted">64 members</p>
+                <p class="community-rank" hidden>70th percentile · #8 of 22</p>
+                <button class="btn slim" type="button" data-join>Join</button>
+              </article>
+              <article class="card community" data-slug="powerlifting">
+                <strong>Powerlifting</strong>
+                <p class="muted">Squat, bench, and deadlift.</p>
+                <p class="muted">210 members</p>
+                <p class="community-rank" hidden>96th percentile · #1 of 18</p>
+                <button class="btn slim" type="button" data-join>Join</button>
+              </article>
+            </div>
+          </section>
+
+          <section class="view" id="login">
+            <div class="auth">
+              <h1 class="wordmark lime">LIFTLOG</h1>
+              <p class="lede">Log every set. Share every PR. Train with your people.</p>
+              <label>Email<input placeholder="you@example.com" /></label>
+              <label>Password<input type="password" placeholder="Password" /></label>
+              <button class="btn" type="button" data-screen="feed">Log in</button>
+              <p class="center muted">New here? <button class="linkish" type="button" data-screen="register">Create an account</button></p>
+            </div>
+          </section>
+
+          <section class="view" id="register">
+            <div class="auth">
+              <h1 class="wordmark lime">LIFTLOG</h1>
+              <p class="lede">Create an account, then log the sets you want people to see.</p>
+              <label>Email<input placeholder="you@example.com" /></label>
+              <label>Username<input placeholder="mohamed" /></label>
+              <label>Password<input type="password" placeholder="Password" /></label>
+              <div class="split">
+                <label>Weight (kg)<input placeholder="70" /></label>
+                <label>Height (cm)<input placeholder="178" /></label>
+              </div>
+              <button class="btn" type="button" data-screen="login">Create account</button>
+              <p class="center muted">Already training? <button class="linkish" type="button" data-screen="login">Log in</button></p>
+            </div>
+          </section>
+        </div>
+        <nav class="tabbar" id="tabbar" aria-label="Primary">
+          <a href="#feed" data-screen="feed" class="active">Home</a>
+          <a href="#log" data-screen="log" class="fab" aria-label="Log workout">+</a>
+          <a href="#profile" data-screen="profile">Profile</a>
+        </nav>
+      </div>
+    </div>
+    <script>
+      const appbar = document.querySelector("#appbar");
+      const tabbar = document.querySelector("#tabbar");
+
+      function show(name) {
+        document.querySelectorAll(".view").forEach((view) => {
+          view.classList.toggle("active", view.id === name);
+        });
+        document.querySelectorAll("#tabbar a").forEach((link) => {
+          link.classList.toggle("active", link.dataset.screen === name);
+        });
+        const logging = name === "log";
+        appbar.classList.toggle("off", logging);
+        tabbar.classList.toggle("off", logging || name === "login" || name === "register");
+        if (location.hash !== "#" + name) history.replaceState(null, "", "#" + name);
+      }
+
+      function showFeed(tab) {
+        document.querySelectorAll("#feed-tabs button").forEach((button) => {
+          button.classList.toggle("active", button.dataset.tab === tab);
+        });
+        let visible = 0;
+        document.querySelectorAll("#feed .card").forEach((card) => {
+          const shown = (card.dataset.scopes || "").split(" ").includes(tab);
+          card.hidden = !shown;
+          if (shown) visible += 1;
+        });
+        document.querySelector("#feed-empty").hidden = visible > 0;
+      }
+
+      document.querySelector("#add-exercise").addEventListener("click", () => {
+        const card = document.createElement("section");
+        card.className = "card";
+        card.innerHTML = `<input class="name-input" placeholder="Exercise name" style="font-size:1.15rem" /><p class="empty">No sets logged yet</p><button class="linkish" type="button" data-add-set>+ Add set</button>`;
+        document.querySelector("#exercise-list").append(card);
+        card.scrollIntoView({ block: "nearest" });
+        card.querySelector("input").focus();
+      });
+
+      document.querySelector("#add-photo").addEventListener("click", () => {
+        document.querySelector("#camera").click();
+      });
+
+      document.querySelector("#camera").addEventListener("change", (event) => {
+        const file = event.target.files && event.target.files[0];
+        if (!file) return;
+        const photo = document.querySelector("#log-photo");
+        photo.src = URL.createObjectURL(file);
+        photo.classList.remove("off");
+      });
+
+      document.querySelector("#new-community").addEventListener("submit", (event) => {
+        event.preventDefault();
+        const name = String(new FormData(event.currentTarget).get("name") || "").trim();
+        if (!name) return;
+        const card = document.createElement("article");
+        card.className = "card community joined";
+        card.innerHTML = `<strong></strong><p class="muted">A community you started.</p><p class="muted">1 member</p><p class="community-rank">100th percentile · #1 of 1</p><button class="btn slim" type="button" data-join>Leave</button>`;
+        card.querySelector("strong").textContent = name;
+        document.querySelector("#community-list").prepend(card);
+        event.currentTarget.reset();
+      });
+
+      document.body.addEventListener("click", (event) => {
+        const addSet = event.target.closest("[data-add-set]");
+        if (addSet) {
+          const card = addSet.closest(".card");
+          let table = card.querySelector("table");
+          if (!table) {
+            card.querySelector(".empty")?.remove();
+            table = document.createElement("table");
+            table.className = "set-table";
+            table.innerHTML = "<thead><tr><th>Set</th><th>kg</th><th>Reps</th><th>Done</th></tr></thead><tbody></tbody>";
+            addSet.before(table);
+          }
+          const body = table.querySelector("tbody");
+          const row = document.createElement("tr");
+          row.innerHTML = `<td>${body.children.length + 1}</td><td><input inputmode="decimal" placeholder="kg" /></td><td><input inputmode="numeric" placeholder="reps" /></td><td><input class="check" type="checkbox" /></td>`;
+          body.append(row);
+          row.querySelector("input").focus();
+          return;
+        }
+        const join = event.target.closest("[data-join]");
+        if (join) {
+          const card = join.closest(".community");
+          const joined = card.classList.toggle("joined");
+          join.textContent = joined ? "Leave" : "Join";
+          const rank = card.querySelector(".community-rank");
+          if (rank) rank.hidden = !joined;
+          return;
+        }
+        const heart = event.target.closest(".heart");
+        if (heart) {
+          const liked = heart.classList.toggle("liked");
+          const count = Number(heart.dataset.likes || 0) + (liked ? 1 : -1);
+          heart.dataset.likes = String(count);
+          heart.textContent = `${liked ? "♥" : "♡"} ${count}`;
+          return;
+        }
+        const tab = event.target.closest("[data-tab]");
+        if (tab) {
+          showFeed(tab.dataset.tab);
+          return;
+        }
+        const trigger = event.target.closest("[data-screen]");
+        if (!trigger) return;
+        event.preventDefault();
+        if (trigger.dataset.screen === "login") document.querySelector("#account").classList.add("off");
+        show(trigger.dataset.screen);
+      });
+
+      document.querySelector("#edit-profile").addEventListener("click", () => {
+        const account = document.querySelector("#account");
+        account.classList.toggle("off");
+        if (!account.classList.contains("off")) account.scrollIntoView({ block: "nearest" });
+      });
+
+      show((location.hash || "#feed").slice(1));
+    </script>
+  </body>
+</html>

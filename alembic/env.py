@@ -1,14 +1,15 @@
 from logging.config import fileConfig
 from alembic import context
-import models
-from database import engine
+
+import app.models
+from app.db.database import engine
 
 
 config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-target_metadata = models.Base.metadata
+target_metadata = app.models.User.metadata
 
 
 def include_name(name, type_, parent_names):

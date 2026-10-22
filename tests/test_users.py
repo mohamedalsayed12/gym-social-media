@@ -1,87 +1,169 @@
-import schemas
+from datetime import UTC, datetime, timedelta
+
 import pytest
-from uuid import uuid4
+from app.core.config import settings
+from app.schemas.user import Token
 from jose import jwt
-from config import settings
 
 
+def test_health(client):
+    res = client.get("/health")
+    assert res.status_code == 200
+    assert res.json() == {"status": "ok"}
 
 
-
-
-# def test_root(client):
-#     res = client.get("/")
-#     print(res.json().get("message"))
-#     assert res.json().get("message") == "Hello World"
-
-
-@pytest.fixture
-def created_user(client,test_user):
-    email = f"hello123+{uuid4().hex}@example.com"
+def test_create_user(client):
     res = client.post(
-        "/users/", json={"email": email, "password": "password123"}
+        "/users/",
+        json={
+            "email": "lifter@example.com",
+            "username": "lifter",
+            "password": "password123",
+            "bodyweight_kg": 60,
+            "height_cm": 170,
+        },
     )
     assert res.status_code == 201
-    new_user = schemas.UserOut(**res.json())
-    assert new_user.email == email
-    return new_user
+    body = res.json()
+    assert body["email"] == "lifter@example.com"
+    assert body["username"] == "lifter"
+    assert body["bodyweight_kg"] == 60
+    assert body["height_cm"] == 170
+    assert "password" not in body
 
 
-def test_create_user(created_user):
-    assert created_user.id > 0
+def test_create_user_requires_body_measurements(client):
+    res = client.post(
+        "/users/",
+        json={"email": "lifter@example.com", "username": "lifter", "password": "password123"},
+    )
+    assert res.status_code == 422
 
 
 def test_create_user_duplicate_email(client, test_user):
     res = client.post(
         "/users/",
-        json={"email": test_user["email"], "password": "another-password"},
+        json={
+            "email": test_user["email"],
+            "username": "someoneelse",
+            "password": "password123",
+            "bodyweight_kg": 70,
+            "height_cm": 175,
+        },
     )
     assert res.status_code == 409
     assert res.json()["detail"] == "Email is already registered"
 
 
-def test_get_own_user(authorized_client, test_user):
-    res = authorized_client.get(f"/users/{test_user['id']}")
+def test_create_user_duplicate_username(client, test_user):
+    res = client.post(
+        "/users/",
+        json={
+            "email": "other@example.com",
+            "username": test_user["username"],
+            "password": "password123",
+            "bodyweight_kg": 70,
+            "height_cm": 175,
+        },
+    )
+    assert res.status_code == 409
+    assert res.json()["detail"] == "Username is already taken"
+
+
+def test_get_me(authorized_client, test_user):
+    res = authorized_client.get("/users/me")
     assert res.status_code == 200
     assert res.json()["email"] == test_user["email"]
+    assert res.json()["username"] == test_user["username"]
 
 
-def test_get_another_user_forbidden(authorized_client, test_user2):
-    res = authorized_client.get(f"/users/{test_user2['id']}")
-    assert res.status_code == 403
-
-
-def test_get_user_requires_login(client, test_user):
-    res = client.get(f"/users/{test_user['id']}")
+def test_get_me_requires_login(client):
+    res = client.get("/users/me")
     assert res.status_code == 401
+
+
+def test_public_profile_hides_email(authorized_client, test_user2):
+    res = authorized_client.get(f"/users/{test_user2['id']}")
+    assert res.status_code == 200
+    assert res.json() == {"id": test_user2["id"], "username": test_user2["username"]}
 
 
 def test_login_user(client, test_user):
     res = client.post(
         "/login",
+        data={"username": test_user["username"], "password": test_user["password"]},
+    )
+    login_res = Token(**res.json())
+    payload = jwt.decode(login_res.access_token, settings.secret_key, algorithms=[settings.algorithm])
+    assert res.status_code == 200
+    assert payload["sub"] == str(test_user["id"])
+    assert payload["type"] == "access"
+    assert login_res.refresh_token
+
+
+def test_login_with_email(client, test_user):
+    res = client.post(
+        "/login",
         data={"username": test_user["email"], "password": test_user["password"]},
     )
-    print(res.json())
-    login_res = schemas.Token(**res.json())
-    payload = jwt.decode(
-        login_res.access_token,
-        settings.secret_key,
-        algorithms=[settings.algorithm],
-    )
-    id = (payload.get("user_id"))
     assert res.status_code == 200
 
 
-@pytest.mark.parametrize("email, password, status_code", [
-    ("wrongemail@example.com", "password123", 403),
-    ("user@example.com", "wrongpassword", 403),
-    ("wrongemail@example.com", "wrongpassword", 403),
-    (None, "password123", 422),
-    ("user@example.com", None, 422),
-])
-def test_incorrect_login(test_user, client, email, password, status_code):
-    res = client.post(
-        "/login",
-        data={"username": email, "password": password},
-    )
+@pytest.mark.parametrize(
+    ("username", "password", "status_code"),
+    [
+        ("wrong", "password123", 403),
+        ("mohamed", "wrongpassword", 403),
+        (None, "password123", 422),
+        ("mohamed", None, 422),
+    ],
+)
+def test_incorrect_login(test_user, client, username, password, status_code):
+    res = client.post("/login", data={"username": username, "password": password})
     assert res.status_code == status_code
+
+
+def test_refresh_token(client, test_user):
+    login = client.post(
+        "/login",
+        data={"username": test_user["username"], "password": test_user["password"]},
+    )
+    refresh_token = login.json()["refresh_token"]
+    res = client.post("/refresh", json={"refresh_token": refresh_token})
+    assert res.status_code == 200
+    me = client.get("/users/me", headers={"Authorization": f"Bearer {res.json()['access_token']}"})
+    assert me.status_code == 200
+
+
+def test_access_token_rejected_as_refresh(client, token):
+    res = client.post("/refresh", json={"refresh_token": token})
+    assert res.status_code == 401
+    assert res.json()["detail"] == "Could not validate credentials"
+
+
+def test_follow_and_unfollow(authorized_client, test_user, test_user2):
+    followed = authorized_client.post(f"/users/{test_user2['id']}/follow")
+    assert followed.status_code == 201
+    again = authorized_client.post(f"/users/{test_user2['id']}/follow")
+    assert again.status_code == 409
+    removed = authorized_client.delete(f"/users/{test_user2['id']}/follow")
+    assert removed.status_code == 204
+    missing = authorized_client.delete(f"/users/{test_user2['id']}/follow")
+    assert missing.status_code == 404
+    self_follow = authorized_client.post(f"/users/{test_user['id']}/follow")
+    assert self_follow.status_code == 400
+
+
+def test_expired_token(client, test_user):
+    expired = jwt.encode(
+        {
+            "sub": str(test_user["id"]),
+            "type": "access",
+            "exp": datetime.now(UTC) - timedelta(minutes=1),
+        },
+        settings.secret_key,
+        algorithm=settings.algorithm,
+    )
+    res = client.get("/users/me", headers={"Authorization": f"Bearer {expired}"})
+    assert res.status_code == 401
+    assert res.json()["detail"] == "Token has expired"

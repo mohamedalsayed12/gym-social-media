@@ -1,49 +1,102 @@
-# Gym Social Media API
+# Gym Social
 
-I'm building this as the backend for a gym-focused social app. Right now it's a post-and-vote API: people can create accounts, sign in, publish posts, and vote. There isn't a frontend or gym-specific content yet, but you can try the API through FastAPI's interactive docs.
+API for logging workouts, following lifters, and liking sessions.
 
-I focused on getting the relationships right. Users can only change their own posts, votes belong to individual users, and the database enforces those links.
+Posts from the course project are workouts. A workout has an owner, notes, a time, and a visibility of `public`, `followers`, or `private`. Each workout lists exercises, and each exercise lists sets with reps and weight in kilograms. A set is a personal record when its weight beats that lifter's previous best for the exercise.
 
-## What works so far
+## Layout
 
-- Registers users and hashes their passwords before storing them.
-- Issues JWT access tokens through `POST /login`.
-- Lets signed-in users create, search, list, update, and delete posts. A user can only change or delete their own posts.
-- Lets users vote once per post and remove their own vote. Post responses include vote counts.
-- Supports pagination on the post list with `limit` and `skip`.
-
-When the app is running, FastAPI's interactive docs are at `/docs`.
-
-## Stack
-
-I used FastAPI, Pydantic, SQLAlchemy, PostgreSQL, and Alembic for the API and database. I added pytest tests, Docker setup, and GitHub Actions. There's also a Heroku deployment workflow in the repo.
-
-## Run it locally
-
-Create an ignored `.env` file in the project root with `DATABASE_PASSWORD` and a long random `SECRET_KEY`. You can leave the database name, username, token algorithm, and token lifetime at the defaults in `docker-compose.prod.yaml`, or set them yourself.
-
-Then run:
-
-```bash
-docker compose -f docker-compose.prod.yaml up -d --build
-docker compose -f docker-compose.prod.yaml exec web alembic upgrade head
+```
+app/
+  main.py
+  core/        config and password/token helpers
+  db/          engine and declarative base
+  models/      User, Exercise, Workout, Set, Follow, Like
+  schemas/
+  routers/     auth, users, workouts, feed
+  services/    database work, including PR detection
+tests/
 ```
 
-The API then runs at `http://localhost:8000`, and you can try it at `http://localhost:8000/docs`. Compose also starts PostgreSQL and keeps its data in a named volume.
+Route functions stay thin. Queries and writes live in `app/services/`.
 
-## Run the tests
+## Run
 
-The tests need a **separate PostgreSQL database** with a name ending in `_test`. Make sure PostgreSQL is reachable, set `TEST_DATABASE_URL` to that test database, then run:
+Copy `.env.example` to `.env` and point it at Postgres.
 
 ```bash
-python -m pip install -r requirements.txt
-python -m pytest -q
+docker compose -f docker-compose.dev.yaml up --build
 ```
 
-The test fixtures recreate the application's tables, so don't use a database with data you want to keep. GitHub Actions starts its own PostgreSQL service and runs the tests on every push and pull request.
+Or, with Postgres already running:
 
-## How I organised the code
+```bash
+alembic upgrade head
+uvicorn app.main:app --reload
+```
 
-I kept the main pieces separate: `routers/` handles posts and users, `auth.py` handles login, and `vote.py` handles voting. `schemas.py` defines the request and response shapes. The SQLAlchemy models and sessions live in `models.py` and `database.py`, migrations live in `alembic/`, and `tests/` covers authentication, post ownership, pagination, and voting.
+`GET /health` returns `{"status": "ok"}`.
 
-This is still a backend project. The next step is a frontend and features specific to a gym community.
+The React app lives in `frontend/`.
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open http://localhost:5173. The UI is a phone-sized LIFTLOG screen: dark feed, set-by-set logger, and a profile with weekly volume and records. The dev server proxies API calls to http://127.0.0.1:8000.
+
+Allowed browser origins come from `CORS_ORIGINS`. The default is the local Vite app, not every origin.
+
+## Auth
+
+Register with `POST /users/` and a JSON body of `email`, `username`, and `password`. Passwords are hashed with Argon2.
+
+`POST /login` takes form fields `username` (email or username) and `password`. The response includes an access token and a refresh token. Send `Authorization: Bearer <access_token>` on later requests. `POST /refresh` accepts `{"refresh_token": "..."}`. An expired token returns `401` with `"Token has expired"`.
+
+`GET /users/me` returns the signed-in user. `GET /users/{id}` returns `{id, username}` and does not include the email.
+
+## Workouts and feed
+
+`POST /workouts/` accepts notes, `performed_at`, visibility, and exercises:
+
+```json
+{
+  "notes": "easy session",
+  "performed_at": "2026-10-18T09:00:00Z",
+  "visibility": "public",
+  "exercises": [
+    {
+      "name": "Bench press",
+      "muscle_group": "chest",
+      "sets": [{"reps": 8, "weight": 80}]
+    }
+  ]
+}
+```
+
+The response is flat: `id`, `notes`, `performed_at`, `visibility`, `owner` (`id` and `username`), `exercises`, `likes`, and `liked_by_me`. `PATCH /workouts/{id}` updates only the fields you send. Delete, like, and unlike are on the same path.
+
+`GET /feed/` filters with `exercise`, `muscle_group`, `performed_from`, and `performed_to`, and pages with `limit` and `skip`.
+
+## Tests
+
+```bash
+python -m ruff check app tests
+python -m ruff format --check app tests
+python -m pytest
+```
+
+Coverage from the latest local run: **94%**.
+cle_group`, `performed_from`, and `performed_to`, and pages with `limit` and `skip`.
+
+## Tests
+
+```bash
+python -m ruff check app tests
+python -m ruff format --check app tests
+python -m pytest
+```
+
+Coverage from the latest local run: **94%**.
