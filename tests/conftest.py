@@ -1,14 +1,18 @@
-from fastapi.testclient import TestClient
-from main import app
 import os
-from sqlalchemy import create_engine
+
+import app.models  # noqa: F401
+import pytest
+from app.core.config import settings
+from app.core.security import create_access_token
+from app.db.base import Base
+from app.db.database import build_database_url, get_db
+from app.main import app
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import sessionmaker
-from config import settings
-from database import Base, build_database_url, get_db
-import pytest
-from oauth2 import create_access_token
-import models
+
+
 def build_test_database_url():
     explicit_url = os.getenv("TEST_DATABASE_URL")
     url = make_url(explicit_url) if explicit_url else build_database_url(settings)
@@ -20,13 +24,16 @@ def build_test_database_url():
         raise ValueError("Test database name must end with '_test'")
     return url
 
+
 engine = create_engine(build_test_database_url())
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
+
 @pytest.fixture()
 def session():
-    print("my session fixture ran")
-    Base.metadata.drop_all(bind=engine)
+    with engine.begin() as connection:
+        connection.execute(text("DROP SCHEMA IF EXISTS public CASCADE"))
+        connection.execute(text("CREATE SCHEMA public"))
     Base.metadata.create_all(bind=engine)
     db = TestingSessionLocal()
     try:
@@ -34,13 +41,11 @@ def session():
     finally:
         db.close()
 
+
 @pytest.fixture()
 def client(session):
     def override_get_db():
-        try:
-            yield session
-        finally:
-            session.close()
+        yield session
 
     app.dependency_overrides[get_db] = override_get_db
     try:
@@ -51,10 +56,15 @@ def client(session):
 
 @pytest.fixture
 def test_user(client):
-    user_data = {"email": "user@example.com", "password": "password123"}
+    user_data = {
+        "email": "mohamedalsayed@gmail.com",
+        "username": "mohamed",
+        "password": "password123",
+        "bodyweight_kg": 70,
+        "height_cm": 180,
+    }
     res = client.post("/users/", json=user_data)
-    assert res.status_code==201
-    print(res.json())
+    assert res.status_code == 201
     new_user = res.json()
     new_user["password"] = user_data["password"]
     return new_user
@@ -62,7 +72,13 @@ def test_user(client):
 
 @pytest.fixture
 def test_user2(client):
-    user_data = {"email": "nora@example.com", "password": "password123"}
+    user_data = {
+        "email": "nora@example.com",
+        "username": "nora",
+        "password": "password123",
+        "bodyweight_kg": 60,
+        "height_cm": 170,
+    }
     res = client.post("/users/", json=user_data)
     assert res.status_code == 201
     new_user = res.json()
@@ -72,33 +88,10 @@ def test_user2(client):
 
 @pytest.fixture
 def token(test_user):
-    return create_access_token({"user_id": test_user["id"]})
+    return create_access_token(test_user["id"])
 
 
 @pytest.fixture
 def authorized_client(client, token):
-    client.headers = {
-        **client.headers,
-        "Authorization": f"Bearer {token}",
-    }
+    client.headers = {**client.headers, "Authorization": f"Bearer {token}"}
     return client
-
-
-@pytest.fixture
-def test_posts(test_user, test_user2, session):
-    posts_data = [{
-        "title": "first title",
-        "content": "first content",
-        "owner_id": test_user["id"],
-    }, {
-        "title": "2nd title",
-        "content": "2nd content",
-        "owner_id": test_user["id"],
-    }, {
-        "title": "3rd title",
-        "content": "3rd content",
-        "owner_id": test_user2["id"],
-    }]
-    session.add_all([models.Post(**post) for post in posts_data])
-    session.commit()
-    return session.query(models.Post).all()
