@@ -39,6 +39,8 @@ uvicorn app.main:app --reload
 
 The React app lives in `frontend/`.
 
+Deployment to the DigitalOcean droplet is described in [DEPLOY.md](DEPLOY.md).
+
 ```bash
 cd frontend
 npm install
