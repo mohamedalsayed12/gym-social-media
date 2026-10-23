@@ -1,32 +1,55 @@
+x-app-env: &app-env
+  DATABASE_HOSTNAME: postgres
+  DATABASE_PORT: 5432
+  DATABASE_PASSWORD: ${DATABASE_PASSWORD:?Set DATABASE_PASSWORD}
+  DATABASE_NAME: ${DATABASE_NAME:-gymsocial}
+  DATABASE_USERNAME: ${DATABASE_USERNAME:-postgres}
+  SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY}
+  ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
+  REFRESH_TOKEN_EXPIRE_MINUTES: ${REFRESH_TOKEN_EXPIRE_MINUTES:-10080}
+  CORS_ORIGINS: ${CORS_ORIGINS:?Set CORS_ORIGINS}
+  S3_BUCKET: ${S3_BUCKET:-}
+  S3_REGION: ${S3_REGION:-eu-west-2}
+  RATE_LIMIT_STORAGE_URI: redis://redis:6379/0
+
 services:
-  web:
+  migrate:
+    image: ${IMAGE:-gym-social:latest}
     build: .
-    image: mohammed20051234/musicsocialmedia:latest
-    pull_policy: build
+    command: ["alembic", "upgrade", "head"]
+    environment: *app-env
     depends_on:
       postgres:
         condition: service_healthy
+
+  web:
+    image: ${IMAGE:-gym-social:latest}
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
     ports:
       - "8000:8000"
     environment:
-      DATABASE_HOSTNAME: postgres
-      DATABASE_PORT: 5432
-      DATABASE_PASSWORD: ${DATABASE_PASSWORD:?Set DATABASE_PASSWORD}
-      DATABASE_NAME: ${DATABASE_NAME:-fastapi}
-      DATABASE_USERNAME: ${DATABASE_USERNAME:-postgres}
-      SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY}
-      ALGORITHM: ${ALGORITHM:-HS256}
-      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
-      REFRESH_TOKEN_EXPIRE_MINUTES: ${REFRESH_TOKEN_EXPIRE_MINUTES:-10080}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
+      <<: *app-env
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-2}
+    volumes:
+      # Only used when S3_BUCKET is empty.
+      - uploads:/home/app/src/uploads
 
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
 
   postgres:
     image: postgres:16
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${DATABASE_USERNAME:-postgres}
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD:?Set DATABASE_PASSWORD}
-      POSTGRES_DB: ${DATABASE_NAME:-fastapi}
+      POSTGRES_DB: ${DATABASE_NAME:-gymsocial}
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
       interval: 5s
@@ -37,4 +60,4 @@ services:
 
 volumes:
   postgres-db:
-
+  uploads:
