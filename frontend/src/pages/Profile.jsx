@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useOutletContext } from "react-router-dom";
 import BodyMap from "../BodyMap.jsx";
-import { api, clearSession } from "../api.js";
+import { api, logout as endSession } from "../api.js";
 import { formatKg, initials } from "../format.js";
 
 export default function Profile() {
@@ -13,7 +13,8 @@ export default function Profile() {
 
   useEffect(() => {
     let active = true;
-    api("/users/me/profile")
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+    api(`/users/me/profile?tz=${encodeURIComponent(zone)}`)
       .then((body) => {
         if (active) setProfile(body);
       })
@@ -25,8 +26,8 @@ export default function Profile() {
     };
   }, []);
 
-  function logout() {
-    clearSession();
+  async function logout() {
+    await endSession();
     navigate("/login");
   }
 

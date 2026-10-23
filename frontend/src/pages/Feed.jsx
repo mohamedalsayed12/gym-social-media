@@ -10,21 +10,36 @@ const TABS = [
   { id: "prs", label: "PRs only" },
 ];
 
+function hasPr(workout) {
+  return workout.exercises.some((exercise) => exercise.sets.some((set) => set.is_pr));
+}
+
 export default function Feed() {
   const [tab, setTab] = useState("discover");
   const [workouts, setWorkouts] = useState([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [cursor, setCursor] = useState(null);
+
+  function fetchPage(after) {
+    const scope = tab === "following" ? "following" : "discover";
+    const query = new URLSearchParams({ scope, limit: "20" });
+    if (after) query.set("cursor", after);
+    return api(`/feed/?${query}`).then((page) => {
+      const rows = tab === "prs" ? page.items.filter(hasPr) : page.items;
+      return { rows, next: page.next_cursor };
+    });
+  }
 
   useEffect(() => {
     let active = true;
     setLoading(true);
-    const scope = tab === "following" ? "following" : "discover";
-    api(`/feed/?scope=${scope}&limit=50`)
-      .then((rows) => {
+    setWorkouts([]);
+    fetchPage(null)
+      .then(({ rows, next }) => {
         if (!active) return;
-        const next = tab === "prs" ? rows.filter((workout) => workout.exercises.some((exercise) => exercise.sets.some((set) => set.is_pr))) : rows;
-        setWorkouts(next);
+        setWorkouts(rows);
+        setCursor(next);
       })
       .catch((err) => {
         if (active) setError(err.message);
@@ -36,6 +51,17 @@ export default function Feed() {
       active = false;
     };
   }, [tab]);
+
+  function loadMore() {
+    setLoading(true);
+    fetchPage(cursor)
+      .then(({ rows, next }) => {
+        setWorkouts((current) => [...current, ...rows]);
+        setCursor(next);
+      })
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
+  }
 
   function replaceWorkout(updated) {
     setWorkouts((current) => current.map((item) => (item.id === updated.id ? updated : item)));
@@ -76,6 +102,11 @@ export default function Feed() {
         </article>
       ))}
       {!loading && workouts.length === 0 ? <p className="empty">No sessions on this tab yet.</p> : null}
+      {cursor ? (
+        <button type="button" className="btn" onClick={loadMore} disabled={loading}>
+          {loading ? "Loading..." : "Load more"}
+        </button>
+      ) : null}
     </main>
   );
 }

@@ -3,6 +3,8 @@ import { useNavigate, useParams } from "react-router-dom";
 import { api, localInputValue, toIso, uploadWorkoutPhoto } from "../api.js";
 import { formatClock, formatKg } from "../format.js";
 
+const MUSCLE_GROUPS = ["chest", "back", "shoulders", "arms", "legs", "core", "full_body"];
+
 function emptySet() {
   return { reps: "", weight: "", done: false };
 }
@@ -86,7 +88,7 @@ export default function WorkoutForm() {
     const cleaned = exercises
       .map((exercise) => ({
         name: exercise.name.trim(),
-        muscle_group: exercise.muscle_group.trim() || "general",
+        muscle_group: exercise.muscle_group || "full_body",
         sets: exercise.sets
           .filter((set) => set.reps !== "" && set.weight !== "")
           .map((set) => ({ reps: Number(set.reps), weight: Number(set.weight) })),
@@ -167,11 +169,17 @@ export default function WorkoutForm() {
               onChange={(event) => updateExercise(exerciseIndex, { name: event.target.value })}
             />
           </div>
-          <input
+          <select
             value={exercise.muscle_group}
-            placeholder="Muscle group"
             onChange={(event) => updateExercise(exerciseIndex, { muscle_group: event.target.value })}
-          />
+          >
+            <option value="">Muscle group</option>
+            {MUSCLE_GROUPS.map((group) => (
+              <option key={group} value={group}>
+                {group.replace("_", " ")}
+              </option>
+            ))}
+          </select>
           <p className="muted">{bestLine(exercise)}</p>
           {exercise.sets.length > 0 ? (
             <table className="set-table">
