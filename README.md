@@ -114,7 +114,13 @@ The feed returns `{"items": [...], "next_cursor": "..."}`. Pass `next_cursor` ba
 
 **Docker:** `docker compose -f docker-compose.prod.yaml up -d` starts Postgres, Redis, a one-off migration job, then the API. Set `DATABASE_PASSWORD`, `SECRET_KEY`, `CORS_ORIGINS`, and `S3_BUCKET` to store photos in S3. The container runs as a non-root user with gunicorn managing uvicorn workers (`WEB_CONCURRENCY`).
 
-**VPS:** `deploy/gunicorn.service` runs migrations then the app behind `deploy/nginx.conf`.
+**VPS:** every push to `main` that passes CI deploys automatically. The `deploy` job SSHes into the server and runs `deploy/deploy.sh`, which pulls `main`, installs dependencies, updates the systemd unit and nginx config, restarts (migrations run first via `deploy/gunicorn.service`), and fails the job if `/health` doesn't come back. One-off setup:
+
+1. Make a deploy key on your computer: `ssh-keygen -t ed25519 -f gym-social-deploy -N ""`, and add `gym-social-deploy.pub` to `~/.ssh/authorized_keys` on the server.
+2. Get the server's host key: `ssh-keyscan 178.128.32.16`.
+3. In GitHub → Settings → Secrets and variables → Actions, add secrets `DEPLOY_SSH_KEY` (contents of `gym-social-deploy`), `DEPLOY_KNOWN_HOSTS` (the ssh-keyscan output), `DEPLOY_HOST` (`178.128.32.16`), `DEPLOY_USER` (`root`), and the variable `DEPLOY_ENABLED` = `true`.
+
+The script can also be run by hand on the server: `sudo bash deploy/deploy.sh`.
 
 ## Tests
 
