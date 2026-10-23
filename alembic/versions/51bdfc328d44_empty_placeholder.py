@@ -1,4 +1,4 @@
-"""empty message
+"""Empty placeholder kept so existing databases can still find this revision.
 
 Revision ID: 51bdfc328d44
 Revises: 50e2b5386323

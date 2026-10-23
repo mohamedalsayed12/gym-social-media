@@ -18,7 +18,6 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     workouts: Mapped[list["Workout"]] = relationship(back_populates="owner")
-    likes: Mapped[list["Like"]] = relationship(back_populates="user")
     following: Mapped[list["Follow"]] = relationship(
         back_populates="follower",
         foreign_keys="Follow.follower_id",

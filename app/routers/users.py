@@ -1,11 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from datetime import UTC, datetime
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.security import get_current_user, hash_password
 from app.db.database import get_db
 from app.models.user import User
-from app.schemas.user import ProfileOut, UserCreate, UserOut, UserPublic
+from app.schemas.user import ProfileOut, UserCreate, UserOut, UserPublic, UserUpdate
 from app.services import user_service
 
 router = APIRouter(prefix="/users", tags=["Users"])
@@ -32,12 +35,38 @@ def get_me(current_user: User = Depends(get_current_user)):
     return current_user
 
 
-@router.get("/me/profile", response_model=ProfileOut)
-def get_my_profile(
+@router.patch("/me", response_model=UserOut)
+def update_me(
+    body: UserUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return user_service.profile_snapshot(db, current_user)
+    if (
+        body.username
+        and body.username != current_user.username
+        and user_service.username_taken(db, body.username)
+    ):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Username is already taken")
+    try:
+        return user_service.update_user(db, current_user, body)
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Username is already taken") from exc
+
+
+@router.get("/me/profile", response_model=ProfileOut)
+def get_my_profile(
+    tz: str = Query(default="UTC", max_length=64, description="IANA time zone, e.g. Europe/London"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    try:
+        zone = ZoneInfo(tz)
+    except (ZoneInfoNotFoundError, ValueError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Unknown time zone"
+        ) from exc
+    return user_service.profile_snapshot(db, current_user, datetime.now(UTC), zone)
 
 
 @router.get("/{user_id}", response_model=UserPublic)
@@ -63,9 +92,8 @@ def follow_user(
     target = user_service.get_user_by_id(db, user_id)
     if target is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    if user_service.is_following(db, current_user.id, target.id):
+    if not user_service.follow_user(db, current_user, target):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Already following this user")
-    user_service.follow_user(db, current_user, target)
     return {"message": f"following {target.username}"}
 
 

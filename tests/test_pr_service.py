@@ -1,7 +1,7 @@
+import pytest
 from app.services.pr_service import (
+    estimated_one_rep_max,
     is_personal_record,
-    lift_standing,
-    overall_standing,
     personal_record_indexes,
     relative_score,
 )
@@ -25,30 +25,14 @@ def test_session_compares_against_previous_best():
     assert personal_record_indexes([90, 110, 105], 100) == [1]
 
 
-def test_relative_score_favours_a_lighter_or_taller_lifter():
-    same_bar = 100
-    lighter = relative_score(same_bar, 60, 175)
-    heavier = relative_score(same_bar, 70, 175)
-    taller = relative_score(same_bar, 70, 190)
-    shorter = relative_score(same_bar, 70, 160)
-    assert lighter > heavier
-    assert taller > shorter
+def test_a_single_is_its_own_max():
+    assert estimated_one_rep_max(140, 1) == 140
 
 
-def test_lift_standing_puts_the_heavier_lifter_first():
-    board = {1: 100.0, 2: 80.0, 3: 100.0}
-    assert lift_standing(100, 1, board) == (1, 3, 100)
-    assert lift_standing(80, 2, board) == (3, 3, 0)
-    assert lift_standing(90, 4, board) == (3, 4, 33)
+def test_reps_raise_the_estimate():
+    assert estimated_one_rep_max(100, 5) == pytest.approx(116.67, abs=0.01)
+    assert estimated_one_rep_max(100, 10) > estimated_one_rep_max(120, 1)
 
 
-def test_overall_standing_is_empty_without_records():
-    assert overall_standing(1, [], {}) == (None, 0, None)
-
-
-def test_overall_standing_averages_each_lift():
-    boards = {"Bench press": {1: 100.0, 2: 60.0}, "Squat": {1: 140.0, 2: 100.0}}
-    rank, lifters, percentile = overall_standing(1, [("Bench press", 100), ("Squat", 140)], boards)
-    assert (rank, lifters, percentile) == (1, 2, 100)
-    rank, lifters, percentile = overall_standing(2, [("Bench press", 60), ("Squat", 100)], boards)
-    assert (rank, lifters, percentile) == (2, 2, 0)
+def test_relative_score_favours_the_lighter_lifter():
+    assert relative_score(120, 60) > relative_score(120, 80)
