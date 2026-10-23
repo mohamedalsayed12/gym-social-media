@@ -9,6 +9,12 @@ class UserCreate(BaseModel):
     height_cm: float = Field(ge=50, le=250)
 
 
+class UserUpdate(BaseModel):
+    username: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_]{3,32}$")
+    bodyweight_kg: float | None = Field(default=None, ge=20, le=400)
+    height_cm: float | None = Field(default=None, ge=50, le=250)
+
+
 class UserPublic(BaseModel):
     id: int
     username: str

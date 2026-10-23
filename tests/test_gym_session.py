@@ -2,6 +2,8 @@
 
 import pytest
 
+API = "/api/v1"
+
 BENCH = {
     "notes": "paused reps",
     "performed_at": "2026-10-18T09:00:00Z",
@@ -18,7 +20,7 @@ BENCH = {
 
 def _signup_and_login(client, email, username):
     created = client.post(
-        "/users/",
+        f"{API}/users/",
         json={
             "email": email,
             "username": username,
@@ -28,7 +30,7 @@ def _signup_and_login(client, email, username):
         },
     )
     assert created.status_code == 201
-    login = client.post("/login", data={"username": username, "password": "password123"})
+    login = client.post(f"{API}/login", data={"username": username, "password": "password123"})
     assert login.status_code == 200
     return {"Authorization": f"Bearer {login.json()['access_token']}"}
 
@@ -41,7 +43,7 @@ def owner(client):
 @pytest.fixture
 def rejected_workout(client, owner):
     rejected = client.post(
-        "/workouts/",
+        f"{API}/workouts/",
         json={
             "performed_at": "2026-10-18T09:00:00Z",
             "exercises": [{"name": "Bench press", "muscle_group": "chest", "sets": [{}]}],
@@ -58,7 +60,7 @@ def rejected_workout(client, owner):
 
 @pytest.fixture
 def bench_workout(client, owner, rejected_workout):
-    created = client.post("/workouts/", json=BENCH, headers=owner)
+    created = client.post(f"{API}/workouts/", json=BENCH, headers=owner)
     assert created.status_code == 201
     workout = created.json()
     assert workout["exercises"][0]["name"] == "Bench press"
@@ -74,25 +76,25 @@ def guest(client, bench_workout):
 def test_bench_session_from_signup_through_delete(client, owner, bench_workout, guest):
     workout_id = bench_workout["id"]
 
-    found = client.get("/feed/?exercise=Bench", headers=owner)
+    found = client.get(f"{API}/feed/?exercise=Bench", headers=owner)
     assert found.status_code == 200
-    assert [item["id"] for item in found.json()] == [workout_id]
+    assert [item["id"] for item in found.json()["items"]] == [workout_id]
 
-    liked = client.post(f"/workouts/{workout_id}/like", headers=owner)
+    liked = client.post(f"{API}/workouts/{workout_id}/like", headers=owner)
     assert liked.status_code == 200
     assert liked.json()["likes"] == 1
     assert liked.json()["liked_by_me"] is True
 
-    unliked = client.delete(f"/workouts/{workout_id}/like", headers=owner)
+    unliked = client.delete(f"{API}/workouts/{workout_id}/like", headers=owner)
     assert unliked.status_code == 200
     assert unliked.json()["likes"] == 0
     assert unliked.json()["liked_by_me"] is False
 
-    opened = client.get(f"/workouts/{workout_id}", headers=guest)
+    opened = client.get(f"{API}/workouts/{workout_id}", headers=guest)
     assert opened.status_code == 200
     assert opened.json()["exercises"][0]["name"] == "Bench press"
     edited_by_guest = client.patch(
-        f"/workouts/{workout_id}",
+        f"{API}/workouts/{workout_id}",
         json={"notes": "not yours"},
         headers=guest,
     )
@@ -100,7 +102,7 @@ def test_bench_session_from_signup_through_delete(client, owner, bench_workout, 
     assert edited_by_guest.json()["detail"] == "You can only edit your own workouts"
 
     edited = client.patch(
-        f"/workouts/{workout_id}",
+        f"{API}/workouts/{workout_id}",
         json={"notes": "added a pause"},
         headers=owner,
     )
@@ -108,7 +110,7 @@ def test_bench_session_from_signup_through_delete(client, owner, bench_workout, 
     assert edited.json()["notes"] == "added a pause"
     assert edited.json()["exercises"][0]["sets"][0]["reps"] == 8
 
-    deleted = client.delete(f"/workouts/{workout_id}", headers=owner)
+    deleted = client.delete(f"{API}/workouts/{workout_id}", headers=owner)
     assert deleted.status_code == 204
-    assert client.get(f"/workouts/{workout_id}", headers=owner).status_code == 404
-    assert client.get("/feed/?exercise=Bench", headers=owner).json() == []
+    assert client.get(f"{API}/workouts/{workout_id}", headers=owner).status_code == 404
+    assert client.get(f"{API}/feed/?exercise=Bench", headers=owner).json()["items"] == []

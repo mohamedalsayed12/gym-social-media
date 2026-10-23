@@ -1,46 +1,95 @@
+import logging
 import uuid
-from pathlib import Path
 
-from sqlalchemy import func, select
+from fastapi import UploadFile
+from sqlalchemy import delete, func, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.models.exercise import Exercise
 from app.models.user import User
 from app.models.workout import Like, Set, Workout, WorkoutExercise
 from app.schemas.workout import ExerciseIn, WorkoutCreate, WorkoutUpdate
-from app.services.feed_service import _LOAD
+from app.services.feed_service import LOAD_WORKOUT
+from app.services.pr_service import estimated_one_rep_max, recompute_prs
+from app.services.storage import get_storage
 
-UPLOAD_DIR = Path(__file__).resolve().parents[2] / "uploads"
-MAX_PHOTO_BYTES = 5 * 1024 * 1024
+logger = logging.getLogger(__name__)
+
+READ_CHUNK = 64 * 1024
 
 
-def get_or_create_exercise(db: Session, name: str, muscle_group: str) -> Exercise:
+class PhotoTooLarge(ValueError):
+    pass
+
+
+def resolve_exercise(db: Session, owner_id: int, name: str, muscle_group: str) -> Exercise:
+    """Use the lifter's own exercise if they have one, then the shared catalogue, else create
+    a custom one for them. Catalogue entries keep their muscle group whatever the user typed."""
     cleaned = name.strip()
-    existing = db.scalar(select(Exercise).where(func.lower(Exercise.name) == cleaned.lower()))
-    if existing is not None:
-        return existing
-    exercise = Exercise(name=cleaned, muscle_group=muscle_group.strip())
-    db.add(exercise)
-    db.flush()
-    return exercise
+    lowered = cleaned.lower()
+    own = db.scalar(
+        select(Exercise).where(Exercise.owner_id == owner_id, func.lower(Exercise.name) == lowered)
+    )
+    if own is not None:
+        own.muscle_group = muscle_group
+        return own
+    shared = db.scalar(
+        select(Exercise).where(Exercise.owner_id.is_(None), func.lower(Exercise.name) == lowered)
+    )
+    if shared is not None:
+        return shared
+    # ON CONFLICT covers two requests from the same lifter creating the same exercise at once.
+    db.execute(
+        insert(Exercise)
+        .values(name=cleaned, muscle_group=muscle_group, owner_id=owner_id)
+        .on_conflict_do_nothing()
+    )
+    return db.scalar(
+        select(Exercise).where(Exercise.owner_id == owner_id, func.lower(Exercise.name) == lowered)
+    )
 
 
-def _replace_exercises(db: Session, workout: Workout, exercises: list[ExerciseIn]) -> None:
+def _lock_owner(db: Session, owner_id: int) -> None:
+    # Serialises one lifter's workout writes so two saves can't both read the same history
+    # and leave stale PR flags. Other lifters are unaffected.
+    db.execute(select(User.id).where(User.id == owner_id).with_for_update())
+
+
+def _replace_exercises(db: Session, workout: Workout, exercises: list[ExerciseIn]) -> set[int]:
+    previous = {block.exercise_id for block in workout.exercises}
     workout.exercises.clear()
     db.flush()
-    for position, block in enumerate(exercises):
-        exercise = get_or_create_exercise(db, block.name, block.muscle_group)
-        link = WorkoutExercise(exercise=exercise, position=position)
-        for number, item in enumerate(block.sets, start=1):
-            link.sets.append(Set(set_number=number, reps=item.reps, weight=item.weight))
-        workout.exercises.append(link)
+    with db.no_autoflush:
+        for position, block in enumerate(exercises):
+            exercise = resolve_exercise(db, workout.owner_id, block.name, block.muscle_group)
+            link = WorkoutExercise(exercise=exercise, position=position)
+            for number, item in enumerate(block.sets, start=1):
+                link.sets.append(
+                    Set(
+                        set_number=number,
+                        reps=item.reps,
+                        weight=item.weight,
+                        e1rm=estimated_one_rep_max(item.weight, item.reps),
+                    )
+                )
+            workout.exercises.append(link)
+    db.flush()
+    return previous | {block.exercise_id for block in workout.exercises}
 
 
 def get_workout(db: Session, workout_id: int) -> Workout | None:
-    return db.scalar(select(Workout).where(Workout.id == workout_id).options(*_LOAD))
+    return db.scalar(
+        select(Workout)
+        .where(Workout.id == workout_id)
+        .options(*LOAD_WORKOUT)
+        .execution_options(populate_existing=True)
+    )
 
 
 def create_workout(db: Session, owner: User, data: WorkoutCreate) -> Workout:
+    _lock_owner(db, owner.id)
     workout = Workout(
         owner_id=owner.id,
         notes=data.notes,
@@ -48,64 +97,83 @@ def create_workout(db: Session, owner: User, data: WorkoutCreate) -> Workout:
         visibility=data.visibility,
     )
     db.add(workout)
-    _replace_exercises(db, workout, data.exercises)
+    touched = _replace_exercises(db, workout, data.exercises)
+    recompute_prs(db, owner.id, touched)
     db.commit()
-    loaded = get_workout(db, workout.id)
-    if loaded is None:
-        raise RuntimeError("Workout disappeared after insert")
-    return loaded
+    return get_workout(db, workout.id)
 
 
 def update_workout(db: Session, workout: Workout, data: WorkoutUpdate) -> Workout:
     changes = data.model_dump(exclude_unset=True)
     exercises = changes.pop("exercises", None)
+    if exercises is not None and len(exercises) == 0:
+        raise ValueError("A workout needs at least one exercise")
+    _lock_owner(db, workout.owner_id)
     for field, value in changes.items():
         setattr(workout, field, value)
+    touched = {block.exercise_id for block in workout.exercises}
     if exercises is not None:
-        if len(exercises) == 0:
-            raise ValueError("A workout needs at least one exercise")
-        _replace_exercises(db, workout, data.exercises or [])
+        touched |= _replace_exercises(db, workout, data.exercises)
+    db.flush()
+    # Moving a workout to a different date can change records on either side of it.
+    if exercises is not None or "performed_at" in changes:
+        recompute_prs(db, workout.owner_id, touched)
     db.commit()
-    loaded = get_workout(db, workout.id)
-    if loaded is None:
-        raise RuntimeError("Workout disappeared after update")
-    return loaded
+    return get_workout(db, workout.id)
 
 
 def delete_workout(db: Session, workout: Workout) -> None:
     photo = workout.photo_name
+    owner_id = workout.owner_id
+    touched = {block.exercise_id for block in workout.exercises}
+    _lock_owner(db, owner_id)
     db.delete(workout)
+    db.flush()
+    recompute_prs(db, owner_id, touched)
     db.commit()
     _remove_photo(photo)
 
 
-def _image_extension(data: bytes) -> str | None:
+def _image_type(data: bytes) -> tuple[str, str] | None:
+    """Sniff the real file type from its first bytes; the client's Content-Type can't be trusted."""
     if data.startswith(b"\xff\xd8\xff"):
-        return ".jpg"
+        return ".jpg", "image/jpeg"
     if data.startswith(b"\x89PNG\r\n\x1a\n"):
-        return ".png"
+        return ".png", "image/png"
     if len(data) >= 12 and data.startswith(b"RIFF") and data[8:12] == b"WEBP":
-        return ".webp"
+        return ".webp", "image/webp"
     return None
+
+
+async def read_upload(file: UploadFile, limit: int = settings.max_photo_bytes) -> bytes:
+    """Read at most `limit` bytes, stopping early so an oversized upload never sits fully in memory."""
+    chunks: list[bytes] = []
+    size = 0
+    while chunk := await file.read(READ_CHUNK):
+        size += len(chunk)
+        if size > limit:
+            raise PhotoTooLarge(f"Photo must be under {limit // (1024 * 1024)} MB")
+        chunks.append(chunk)
+    return b"".join(chunks)
 
 
 def _remove_photo(photo_name: str | None) -> None:
     if not photo_name:
         return
-    path = UPLOAD_DIR / photo_name
-    if path.is_file():
-        path.unlink()
+    try:
+        get_storage().delete(photo_name)
+    except Exception:
+        # The database change already committed; an orphaned file is cheaper than a failed request.
+        logger.exception("Could not delete photo %s", photo_name)
 
 
 def save_photo(db: Session, workout: Workout, data: bytes) -> None:
-    if len(data) > MAX_PHOTO_BYTES:
-        raise ValueError("Photo must be under 5 MB")
-    extension = _image_extension(data)
-    if extension is None:
+    detected = _image_type(data)
+    if detected is None:
         raise ValueError("Use a JPEG, PNG, or WebP photo")
-    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    extension, content_type = detected
     filename = f"{uuid.uuid4().hex}{extension}"
-    (UPLOAD_DIR / filename).write_bytes(data)
+    get_storage().save(filename, data, content_type)
     previous = workout.photo_name
     workout.photo_name = filename
     db.commit()
@@ -113,18 +181,13 @@ def save_photo(db: Session, workout: Workout, data: bytes) -> None:
 
 
 def like_workout(db: Session, user: User, workout: Workout) -> bool:
-    existing = db.scalar(select(Like).where(Like.user_id == user.id, Like.workout_id == workout.id))
-    if existing is not None:
-        return False
-    db.add(Like(user_id=user.id, workout_id=workout.id))
+    """Return False if it was already liked. ON CONFLICT makes a double-tap safe instead of a 500."""
+    result = db.execute(insert(Like).values(user_id=user.id, workout_id=workout.id).on_conflict_do_nothing())
     db.commit()
-    return True
+    return result.rowcount == 1
 
 
 def unlike_workout(db: Session, user: User, workout: Workout) -> bool:
-    existing = db.scalar(select(Like).where(Like.user_id == user.id, Like.workout_id == workout.id))
-    if existing is None:
-        return False
-    db.delete(existing)
+    result = db.execute(delete(Like).where(Like.user_id == user.id, Like.workout_id == workout.id))
     db.commit()
-    return True
+    return result.rowcount == 1

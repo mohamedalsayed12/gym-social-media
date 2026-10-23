@@ -10,13 +10,6 @@ from app.services import community_service
 router = APIRouter(prefix="/communities", tags=["Communities"])
 
 
-def _one(db: Session, user: User, slug: str) -> CommunityOut:
-    match = next((item for item in community_service.list_communities(db, user) if item.slug == slug), None)
-    if match is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Community not found")
-    return match
-
-
 @router.get("/", response_model=list[CommunityOut])
 def list_communities(
     db: Session = Depends(get_db),
@@ -35,7 +28,7 @@ def create_community(
         community = community_service.create_community(db, current_user, body)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    return _one(db, current_user, community.slug)
+    return community_service.community_out(db, current_user, community)
 
 
 @router.post("/{slug}/join", response_model=CommunityOut)
@@ -51,7 +44,7 @@ def join_community(
         community_service.join_community(db, current_user, community)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    return _one(db, current_user, slug)
+    return community_service.community_out(db, current_user, community)
 
 
 @router.delete("/{slug}/join", status_code=status.HTTP_204_NO_CONTENT)

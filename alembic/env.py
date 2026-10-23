@@ -1,9 +1,8 @@
 from logging.config import fileConfig
-from alembic import context
 
 import app.models
+from alembic import context
 from app.db.database import engine
-
 
 config = context.config
 if config.config_file_name is not None:
@@ -35,19 +34,27 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
-def run_migrations_online() -> None:
-    """Run migrations using the application's database engine."""
-    with engine.connect() as connection:
-        context.configure(
-            connection=connection,
-            target_metadata=target_metadata,
-            compare_type=True,
-            compare_server_default=True,
-            include_name=include_name,
-        )
+def _run(connection) -> None:
+    context.configure(
+        connection=connection,
+        target_metadata=target_metadata,
+        compare_type=True,
+        compare_server_default=True,
+        include_name=include_name,
+    )
+    with context.begin_transaction():
+        context.run_migrations()
 
-        with context.begin_transaction():
-            context.run_migrations()
+
+def run_migrations_online() -> None:
+    """Run migrations on a connection the caller passed in (the test suite does this),
+    otherwise on the application's database engine."""
+    connection = config.attributes.get("connection")
+    if connection is not None:
+        _run(connection)
+        return
+    with engine.connect() as connection:
+        _run(connection)
 
 
 if context.is_offline_mode():
