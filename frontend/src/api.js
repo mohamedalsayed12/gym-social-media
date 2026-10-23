@@ -1,7 +1,8 @@
 export const TOKEN_KEY = "gym-social-token";
 export const REFRESH_KEY = "gym-social-refresh";
 
-export const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+export const API_ORIGIN = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+export const API_URL = `${API_ORIGIN}/api/v1`;
 
 export function getToken() {
   return localStorage.getItem(TOKEN_KEY);
@@ -27,6 +28,19 @@ export function saveSession(token) {
 
 export function setSession(token) {
   saveSession(token);
+}
+
+export async function logout() {
+  const refreshToken = localStorage.getItem(REFRESH_KEY);
+  clearSession();
+  if (!refreshToken) return;
+  // Best effort: the local session is already gone even if this request fails.
+  await fetch(`${API_URL}/logout`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ refresh_token: refreshToken }),
+    credentials: "omit",
+  }).catch(() => {});
 }
 
 export function clearSession() {
@@ -127,7 +141,7 @@ export function workoutTitle(workout) {
 export function mediaUrl(path) {
   if (!path) return "";
   if (path.startsWith("http")) return path;
-  return `${API_URL}${path}`;
+  return `${API_ORIGIN}${path}`;
 }
 
 export async function uploadWorkoutPhoto(workoutId, file) {

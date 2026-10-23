@@ -17,13 +17,8 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      "/workouts": proxyApi(),
-      "/feed": proxyApi(),
-      "/users": proxyApi(),
-      "/login": proxyApi(),
-      "/refresh": proxyApi(),
+      "/api": proxyApi(),
       "/health": proxyApi(),
-      "/communities": proxyApi(),
       "/media": proxyApi(),
     },
   },
