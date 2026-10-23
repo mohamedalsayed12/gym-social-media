@@ -33,7 +33,12 @@ def build_database_url(config) -> URL:
     )
 
 
-engine = create_engine(build_database_url(settings))
+engine = create_engine(
+    build_database_url(settings),
+    pool_size=settings.db_pool_size,
+    max_overflow=settings.db_max_overflow,
+    pool_pre_ping=True,
+)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 

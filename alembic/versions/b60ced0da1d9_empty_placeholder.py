@@ -1,4 +1,4 @@
-"""describe the change
+"""Empty placeholder kept so existing databases can still find this revision.
 
 Revision ID: b60ced0da1d9
 Revises: 8b7dada28b71

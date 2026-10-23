@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, Float, ForeignKey, String, func
+from sqlalchemy import Boolean, CheckConstraint, DateTime, Float, ForeignKey, Index, String, func, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -13,6 +13,8 @@ class Workout(Base):
             "visibility IN ('public', 'followers', 'private')",
             name="ck_workouts_visibility",
         ),
+        Index("ix_workouts_owner_performed", "owner_id", "performed_at"),
+        Index("ix_workouts_visibility_performed", "visibility", "performed_at", "id"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -27,17 +29,17 @@ class Workout(Base):
     exercises: Mapped[list["WorkoutExercise"]] = relationship(
         back_populates="workout",
         cascade="all, delete-orphan",
+        passive_deletes=True,
         order_by="WorkoutExercise.position",
     )
-    likes: Mapped[list["Like"]] = relationship(back_populates="workout", cascade="all, delete-orphan")
 
 
 class WorkoutExercise(Base):
     __tablename__ = "workout_exercises"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    workout_id: Mapped[int] = mapped_column(ForeignKey("workouts.id", ondelete="CASCADE"))
-    exercise_id: Mapped[int] = mapped_column(ForeignKey("exercises.id", ondelete="CASCADE"))
+    workout_id: Mapped[int] = mapped_column(ForeignKey("workouts.id", ondelete="CASCADE"), index=True)
+    exercise_id: Mapped[int] = mapped_column(ForeignKey("exercises.id", ondelete="CASCADE"), index=True)
     position: Mapped[int] = mapped_column()
 
     workout: Mapped["Workout"] = relationship(back_populates="exercises")
@@ -45,6 +47,7 @@ class WorkoutExercise(Base):
     sets: Mapped[list["Set"]] = relationship(
         back_populates="workout_exercise",
         cascade="all, delete-orphan",
+        passive_deletes=True,
         order_by="Set.set_number",
     )
 
@@ -53,10 +56,16 @@ class Set(Base):
     __tablename__ = "sets"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    workout_exercise_id: Mapped[int] = mapped_column(ForeignKey("workout_exercises.id", ondelete="CASCADE"))
+    workout_exercise_id: Mapped[int] = mapped_column(
+        ForeignKey("workout_exercises.id", ondelete="CASCADE"), index=True
+    )
     set_number: Mapped[int] = mapped_column()
     reps: Mapped[int] = mapped_column()
     weight: Mapped[float] = mapped_column(Float)
+    # Both are derived, but stored so feeds and leaderboards can read them without
+    # replaying a lifter's whole history on every request. pr_service keeps them current.
+    e1rm: Mapped[float] = mapped_column(Float, server_default=text("0"))
+    is_pr: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
 
     workout_exercise: Mapped["WorkoutExercise"] = relationship(back_populates="sets")
 
@@ -65,7 +74,6 @@ class Like(Base):
     __tablename__ = "likes"
 
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
-    workout_id: Mapped[int] = mapped_column(ForeignKey("workouts.id", ondelete="CASCADE"), primary_key=True)
-
-    user: Mapped["User"] = relationship(back_populates="likes")
-    workout: Mapped["Workout"] = relationship(back_populates="likes")
+    workout_id: Mapped[int] = mapped_column(
+        ForeignKey("workouts.id", ondelete="CASCADE"), primary_key=True, index=True
+    )

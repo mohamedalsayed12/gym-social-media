@@ -41,7 +41,7 @@ def create_workout(
     current_user: User = Depends(get_current_user),
 ):
     workout = workout_service.create_workout(db, current_user, body)
-    return feed_service.to_workout_out(db, workout, current_user.id)
+    return feed_service.serialize_workout(db, workout, current_user.id)
 
 
 @router.get("/{workout_id}", response_model=WorkoutOut)
@@ -51,7 +51,7 @@ def get_workout(
     current_user: User = Depends(get_current_user),
 ):
     workout = _visible_workout(db, workout_id, current_user)
-    return feed_service.to_workout_out(db, workout, current_user.id)
+    return feed_service.serialize_workout(db, workout, current_user.id)
 
 
 @router.patch("/{workout_id}", response_model=WorkoutOut)
@@ -64,8 +64,8 @@ def update_workout(
     try:
         updated = workout_service.update_workout(db, workout, body)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
-    return feed_service.to_workout_out(db, updated, current_user.id)
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+    return feed_service.serialize_workout(db, updated, current_user.id)
 
 
 @router.delete("/{workout_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -85,11 +85,15 @@ async def add_photo(
     current_user: User = Depends(get_current_user),
 ):
     try:
-        workout_service.save_photo(db, workout, await file.read())
+        data = await workout_service.read_upload(file)
+    except workout_service.PhotoTooLarge as exc:
+        raise HTTPException(status_code=status.HTTP_413_CONTENT_TOO_LARGE, detail=str(exc)) from exc
+    try:
+        workout_service.save_photo(db, workout, data)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     refreshed = workout_service.get_workout(db, workout.id)
-    return feed_service.to_workout_out(db, refreshed, current_user.id)
+    return feed_service.serialize_workout(db, refreshed, current_user.id)
 
 
 @router.post("/{workout_id}/like", response_model=WorkoutOut)
@@ -102,7 +106,7 @@ def like_workout(
     if not workout_service.like_workout(db, current_user, workout):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Already liked this workout")
     refreshed = workout_service.get_workout(db, workout.id)
-    return feed_service.to_workout_out(db, refreshed, current_user.id)
+    return feed_service.serialize_workout(db, refreshed, current_user.id)
 
 
 @router.delete("/{workout_id}/like", response_model=WorkoutOut)
@@ -115,4 +119,4 @@ def unlike_workout(
     if not workout_service.unlike_workout(db, current_user, workout):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Like does not exist")
     refreshed = workout_service.get_workout(db, workout.id)
-    return feed_service.to_workout_out(db, refreshed, current_user.id)
+    return feed_service.serialize_workout(db, refreshed, current_user.id)

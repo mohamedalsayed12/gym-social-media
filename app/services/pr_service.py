@@ -1,11 +1,32 @@
-from datetime import datetime
+"""Personal records and strength rankings.
 
-from sqlalchemy import func, select
+PR flags are written to the sets table when a workout is saved, so reading a feed never has to
+replay anyone's history. Rankings use estimated one-rep maxes per kilogram of bodyweight and are
+computed in Postgres with window functions, so the work stays in the database as the user count grows.
+"""
+
+from collections import defaultdict
+from itertools import groupby
+
+from sqlalchemy import Integer, Numeric, case, cast, func, literal, or_, select, update
 from sqlalchemy.orm import Session
 
-from app.models.exercise import Exercise
+from app.models.community import Membership
 from app.models.user import User
 from app.models.workout import Set, Workout, WorkoutExercise
+
+Standing = tuple[int, int, int]  # rank, lifters on the board, percentile
+
+
+def estimated_one_rep_max(weight: float, reps: int) -> float:
+    """Epley formula. A single is already a true max, so it is returned unchanged."""
+    if reps <= 1:
+        return weight
+    return weight * (1 + reps / 30)
+
+
+def relative_score(e1rm: float, bodyweight_kg: float) -> float:
+    return e1rm / bodyweight_kg
 
 
 def is_personal_record(weight: float, previous_best: float | None) -> bool:
@@ -25,121 +46,172 @@ def personal_record_indexes(weights: list[float], previous_best: float | None) -
     return indexes
 
 
-def previous_best_weight(
-    db: Session,
-    owner_id: int,
-    exercise_id: int,
-    before: datetime,
-    exclude_workout_id: int | None = None,
-) -> float | None:
-    statement = (
-        select(func.max(Set.weight))
-        .join(WorkoutExercise, Set.workout_exercise_id == WorkoutExercise.id)
-        .join(Workout, WorkoutExercise.workout_id == Workout.id)
-        .where(
-            Workout.owner_id == owner_id,
-            WorkoutExercise.exercise_id == exercise_id,
-            Workout.performed_at < before,
-        )
-    )
-    if exclude_workout_id is not None:
-        statement = statement.where(Workout.id != exclude_workout_id)
-    return db.scalar(statement)
+def recompute_prs(db: Session, owner_id: int, exercise_ids: set[int]) -> None:
+    """Rewrite is_pr for one lifter's history on the given exercises.
 
-
-def relative_score(lift: float, bodyweight_kg: float, height_cm: float) -> float:
-    """Lift per kilogram of bodyweight, scaled by height in metres.
-
-    A lighter lifter outranks a heavier one who lifts the same bar.
-    A taller lifter outranks a shorter one at the same bodyweight, because the bar travels farther.
+    Adding, editing or deleting a workout can change whether later sets were records, so the
+    whole history for each touched exercise is replayed. That is one indexed query per save,
+    instead of one query per exercise per workout every time a feed is read.
     """
-    return lift / bodyweight_kg * (height_cm / 100)
-
-
-def public_scores(db: Session) -> dict[str, dict[int, float]]:
-    """Relative-strength score of each lifter's heaviest public set, by exercise."""
+    if not exercise_ids:
+        return
     rows = db.execute(
-        select(Exercise.name, Workout.owner_id, func.max(Set.weight), User.bodyweight_kg, User.height_cm)
-        .select_from(Set)
+        select(
+            WorkoutExercise.exercise_id,
+            Workout.performed_at,
+            WorkoutExercise.id,
+            Set.id,
+            Set.weight,
+            Set.is_pr,
+        )
         .join(WorkoutExercise, Set.workout_exercise_id == WorkoutExercise.id)
         .join(Workout, WorkoutExercise.workout_id == Workout.id)
-        .join(Exercise, WorkoutExercise.exercise_id == Exercise.id)
-        .join(User, Workout.owner_id == User.id)
-        .where(
-            Workout.visibility == "public",
-            User.bodyweight_kg.is_not(None),
-            User.height_cm.is_not(None),
+        .where(Workout.owner_id == owner_id, WorkoutExercise.exercise_id.in_(exercise_ids))
+        .order_by(
+            WorkoutExercise.exercise_id,
+            Workout.performed_at,
+            Workout.id,
+            WorkoutExercise.position,
+            Set.set_number,
         )
-        .group_by(Exercise.name, Workout.owner_id, User.bodyweight_kg, User.height_cm)
     ).all()
-    boards: dict[str, dict[int, float]] = {}
-    for name, owner_id, weight, bodyweight_kg, height_cm in rows:
-        boards.setdefault(name, {})[owner_id] = relative_score(
-            float(weight), float(bodyweight_kg), float(height_cm)
-        )
-    return boards
+
+    became_pr: list[int] = []
+    lost_pr: list[int] = []
+    for _, history in groupby(rows, key=lambda row: row[0]):
+        best_before: float | None = None
+        # Workouts logged at the same moment don't count against each other.
+        for _, same_time in groupby(history, key=lambda row: row[1]):
+            same_time = list(same_time)
+            for _, block in groupby(same_time, key=lambda row: row[2]):
+                block = list(block)
+                winners = set(personal_record_indexes([row[4] for row in block], best_before))
+                for index, row in enumerate(block):
+                    flag = index in winners
+                    if flag != row[5]:
+                        (became_pr if flag else lost_pr).append(row[3])
+            heaviest = max(row[4] for row in same_time)
+            best_before = heaviest if best_before is None else max(best_before, heaviest)
+
+    if became_pr:
+        db.execute(update(Set).where(Set.id.in_(became_pr)).values(is_pr=True))
+    if lost_pr:
+        db.execute(update(Set).where(Set.id.in_(lost_pr)).values(is_pr=False))
 
 
-def boards_for(boards: dict[str, dict[int, float]], user_ids: set[int]) -> dict[str, dict[int, float]]:
-    """Keep only the lifters who belong to one community."""
-    scoped: dict[str, dict[int, float]] = {}
-    for name, board in boards.items():
-        kept = {user_id: score for user_id, score in board.items() if user_id in user_ids}
-        if kept:
-            scoped[name] = kept
-    return scoped
+def _best_scores(viewer_id: int, exercise_ids: list[int] | None = None):
+    """Each lifter's best e1RM per exercise, divided by bodyweight.
 
-
-def lift_standing(weight: float, owner_id: int, board: dict[int, float]) -> tuple[int, int, int]:
-    """Rank, field size, and percentile against other lifters on this exercise.
-
-    Percentile is the share of other lifters this weight matches or beats.
-    A lifter with no one to compare against is in the 100th percentile.
+    Other lifters only count their public workouts. The viewer always sees their own lifts,
+    including private ones, ranked against that public board.
     """
-    others = [best for user_id, best in board.items() if user_id != owner_id]
-    heavier = sum(best > weight for best in others)
-    matched_or_beaten = sum(best <= weight for best in others)
-    percentile = 100 if not others else round(100 * matched_or_beaten / len(others))
-    return heavier + 1, len(others) + 1, percentile
-
-
-def overall_standing(
-    owner_id: int,
-    records: list[tuple[str, float]],
-    boards: dict[str, dict[int, float]],
-) -> tuple[int | None, int, int | None]:
-    """Overall rank, field size, and percentile from the mean of each lift's percentile."""
-    if not records:
-        return None, 0, None
-    own = [lift_standing(weight, owner_id, boards.get(name, {}))[2] for name, weight in records]
-    score = round(sum(own) / len(own))
-    scores: dict[int, int] = {}
-    public_users = {user_id for board in boards.values() for user_id in board}
-    for user_id in public_users:
-        parts = [
-            lift_standing(board[user_id], user_id, board)[2]
-            for name, board in boards.items()
-            if user_id in board
-        ]
-        if parts:
-            scores[user_id] = round(sum(parts) / len(parts))
-    scores[owner_id] = score
-    heavier = sum(other > score for user_id, other in scores.items() if user_id != owner_id)
-    return heavier + 1, len(scores), score
-
-
-def pr_flags(db: Session, workout: Workout) -> dict[int, bool]:
-    flags: dict[int, bool] = {}
-    for block in workout.exercises:
-        previous = previous_best_weight(
-            db,
-            workout.owner_id,
-            block.exercise_id,
-            workout.performed_at,
-            exclude_workout_id=workout.id,
+    best = (
+        select(
+            Workout.owner_id.label("user_id"),
+            WorkoutExercise.exercise_id.label("exercise_id"),
+            func.max(Set.e1rm).label("best"),
         )
-        ordered = sorted(block.sets, key=lambda item: item.set_number)
-        indexes = set(personal_record_indexes([item.weight for item in ordered], previous))
-        for index, item in enumerate(ordered):
-            flags[item.id] = index in indexes
-    return flags
+        .join(WorkoutExercise, Set.workout_exercise_id == WorkoutExercise.id)
+        .join(Workout, WorkoutExercise.workout_id == Workout.id)
+        .where(or_(Workout.visibility == "public", Workout.owner_id == viewer_id))
+        .group_by(Workout.owner_id, WorkoutExercise.exercise_id)
+    )
+    if exercise_ids is not None:
+        best = best.where(WorkoutExercise.exercise_id.in_(exercise_ids))
+    best = best.subquery()
+    return (
+        select(
+            best.c.user_id,
+            best.c.exercise_id,
+            (best.c.best / User.bodyweight_kg).label("score"),
+        )
+        .join(User, User.id == best.c.user_id)
+        .where(User.bodyweight_kg.is_not(None), User.bodyweight_kg > 0)
+    )
+
+
+def _per_lift(scores, scope):
+    """Rank and percentile on each exercise board. Percentile is the share of the other lifters
+    you match or beat; a lifter alone on a board is in the 100th percentile."""
+    board = (scope, scores.c.exercise_id)
+    field = func.count().over(partition_by=board)
+    matched_or_beaten = func.count().over(partition_by=board, order_by=scores.c.score, range_=(None, 0))
+    percentile = case(
+        (field == 1, 100),
+        else_=cast(func.round(cast(100.0 * (matched_or_beaten - 1) / (field - 1), Numeric)), Integer),
+    )
+    return select(
+        scope.label("scope"),
+        scores.c.user_id,
+        scores.c.exercise_id,
+        func.rank().over(partition_by=board, order_by=scores.c.score.desc()).label("rank"),
+        field.label("lifters"),
+        percentile.label("percentile"),
+    )
+
+
+def lift_standings(db: Session, viewer_id: int, exercise_ids: list[int]) -> dict[int, Standing]:
+    """The viewer's standing on each exercise across every lifter."""
+    if not exercise_ids:
+        return {}
+    scores = _best_scores(viewer_id, exercise_ids).subquery()
+    lifts = _per_lift(scores, literal(0)).subquery()
+    rows = db.execute(
+        select(lifts.c.exercise_id, lifts.c.rank, lifts.c.lifters, lifts.c.percentile).where(
+            lifts.c.user_id == viewer_id
+        )
+    ).all()
+    return {exercise_id: (rank, lifters, percentile) for exercise_id, rank, lifters, percentile in rows}
+
+
+def overall_standings(
+    db: Session, viewer_id: int, community_ids: list[int] | None = None
+) -> dict[int, Standing]:
+    """Overall standing from the mean of each lift's percentile.
+
+    With no community ids this ranks against every lifter and the result is keyed by 0.
+    Otherwise each community is ranked separately against its own members only.
+    """
+    if community_ids == []:
+        return {}
+    scores = _best_scores(viewer_id)
+    if community_ids is None:
+        scores = scores.subquery()
+        scope = literal(0)
+    else:
+        scores = (
+            scores.add_columns(Membership.community_id)
+            .join(Membership, Membership.user_id == User.id)
+            .where(Membership.community_id.in_(community_ids))
+            .subquery()
+        )
+        scope = scores.c.community_id
+
+    lifts = _per_lift(scores, scope).subquery()
+    per_lifter = (
+        select(
+            lifts.c.scope,
+            lifts.c.user_id,
+            cast(func.round(func.avg(lifts.c.percentile)), Integer).label("percentile"),
+        )
+        .group_by(lifts.c.scope, lifts.c.user_id)
+        .subquery()
+    )
+    ranked = select(
+        per_lifter.c.scope,
+        per_lifter.c.user_id,
+        func.rank()
+        .over(partition_by=per_lifter.c.scope, order_by=per_lifter.c.percentile.desc())
+        .label("rank"),
+        func.count().over(partition_by=per_lifter.c.scope).label("lifters"),
+        per_lifter.c.percentile,
+    ).subquery()
+    rows = db.execute(
+        select(ranked.c.scope, ranked.c.rank, ranked.c.lifters, ranked.c.percentile).where(
+            ranked.c.user_id == viewer_id
+        )
+    ).all()
+    standings: dict[int, Standing] = defaultdict(lambda: (None, 0, None))
+    for scope_id, rank, lifters, percentile in rows:
+        standings[scope_id] = (rank, lifters, percentile)
+    return standings
