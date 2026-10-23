@@ -12,6 +12,8 @@ BUCKET=${BUCKET:-gym-social-photos-mk}
 REPO=${REPO:-mohamedalsayed12/gym-social-media}
 INSTANCE_TYPE=${INSTANCE_TYPE:-t3.micro}
 DB_CLASS=${DB_CLASS:-db.t4g.micro}
+# Free-plan accounts are limited to 1 day of automated backups; raise this on a paid plan.
+BACKUP_DAYS=${BACKUP_DAYS:-1}
 
 step() { echo; echo "==> $*"; }
 account=$(aws sts get-caller-identity --query Account --output text)
@@ -50,7 +52,7 @@ if ! aws rds describe-db-instances --db-instance-identifier "$NAME-db" >/dev/nul
         --master-username gymsocial --manage-master-user-password \
         --db-name gymsocial \
         --vpc-security-group-ids "$db_sg" --no-publicly-accessible \
-        --backup-retention-period 7 \
+        --backup-retention-period "$BACKUP_DAYS" \
         --deletion-protection >/dev/null
     echo "Creating; this usually takes 5-10 minutes"
 fi
