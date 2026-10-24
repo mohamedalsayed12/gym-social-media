@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Deploys main on the VPS. GitHub Actions runs this over SSH after every push to main;
-# it can also be run by hand on the server: sudo bash deploy/deploy.sh
 set -euo pipefail
 
 APP_DIR=${APP_DIR:-/home/fastapi/app}
@@ -17,7 +15,6 @@ fi
 
 echo "==> Pulling main"
 as_app git fetch --quiet origin main
-# --ff-only refuses to deploy if someone edited files on the server, instead of overwriting them.
 as_app git merge --ff-only origin/main
 echo "Now at $(as_app git log -1 --format='%h %s')"
 

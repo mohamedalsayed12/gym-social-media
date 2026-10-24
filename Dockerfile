@@ -26,6 +26,4 @@ USER app
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=3s CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"
 
-# Migrations run as a separate one-off step (see docker-compose.prod.yaml), not here,
-# so starting several replicas doesn't race to migrate the same database.
 CMD ["sh", "-c", "exec gunicorn app.main:app -k uvicorn_worker.UvicornWorker -w \"$WEB_CONCURRENCY\" -b 0.0.0.0:8000 --forwarded-allow-ips '*'"]

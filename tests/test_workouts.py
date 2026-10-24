@@ -275,7 +275,6 @@ def test_ranking_uses_estimated_max_per_kilo_of_bodyweight(client):
     assert bench_rank(light) == 1
     assert bench_rank(heavy) == 2
 
-    # Ten reps at 100 kg (about 133 kg estimated) beats a single at 120 kg at the same bodyweight.
     volume = lifter("volume@example.com", "volume", 90)
     single = lifter("single@example.com", "single", 90)
     bench(volume, 10, 100)

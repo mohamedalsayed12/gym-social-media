@@ -22,7 +22,6 @@ class Settings(BaseSettings):
     db_pool_size: int = 5
     db_max_overflow: int = 10
 
-    # HS256 keys shorter than this can be brute-forced offline from a single token.
     secret_key: str = Field(min_length=32)
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
@@ -31,7 +30,6 @@ class Settings(BaseSettings):
 
     login_rate_limit: str = "5/minute"
     rate_limit_enabled: bool = True
-    # Point this at Redis when running more than one worker, otherwise each worker counts separately.
     rate_limit_storage_uri: str = "memory://"
 
     upload_dir: Path = BASE_DIR / "uploads"

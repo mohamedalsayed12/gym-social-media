@@ -6,7 +6,6 @@ from pydantic import BaseModel, BeforeValidator, Field
 Visibility = Literal["public", "followers", "private"]
 MuscleGroup = Literal["chest", "back", "shoulders", "arms", "legs", "core", "full_body"]
 
-# People type what they train, not a region, so common names are mapped onto the body-map regions.
 MUSCLE_ALIASES = {
     "pec": "chest",
     "pecs": "chest",

@@ -36,7 +36,6 @@ services:
       <<: *app-env
       WEB_CONCURRENCY: ${WEB_CONCURRENCY:-2}
     volumes:
-      # Only used when S3_BUCKET is empty.
       - uploads:/home/app/src/uploads
 
   redis:

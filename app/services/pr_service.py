@@ -15,7 +15,7 @@ from app.models.community import Membership
 from app.models.user import User
 from app.models.workout import Set, Workout, WorkoutExercise
 
-Standing = tuple[int, int, int]  # rank, lifters on the board, percentile
+Standing = tuple[int, int, int]
 
 
 def estimated_one_rep_max(weight: float, reps: int) -> float:
@@ -80,7 +80,6 @@ def recompute_prs(db: Session, owner_id: int, exercise_ids: set[int]) -> None:
     lost_pr: list[int] = []
     for _, history in groupby(rows, key=lambda row: row[0]):
         best_before: float | None = None
-        # Workouts logged at the same moment don't count against each other.
         for _, same_time in groupby(history, key=lambda row: row[1]):
             same_time = list(same_time)
             for _, block in groupby(same_time, key=lambda row: row[2]):

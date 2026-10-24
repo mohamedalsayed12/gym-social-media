@@ -52,7 +52,6 @@ COMMUNITIES = [
 
 
 def upgrade() -> None:
-    # Exercises: fold free-text muscle groups onto the fixed regions.
     cases = " ".join(
         f"WHEN lower(trim(muscle_group)) = '{alias}' THEN '{region}'" for alias, region in ALIASES.items()
     )
@@ -68,8 +67,6 @@ def upgrade() -> None:
     )
     op.create_check_constraint("ck_exercises_muscle_group", "exercises", f"muscle_group IN ({allowed})")
 
-    # Names used to be unique by exact case. Merge "bench press" into "Bench press" before
-    # the case-insensitive index goes on.
     op.execute(
         """
         WITH keep AS (
@@ -103,7 +100,6 @@ def upgrade() -> None:
         postgresql_where=sa.text("owner_id IS NOT NULL"),
     )
 
-    # Sets: store e1RM and PR flags, then backfill them from history.
     op.add_column("sets", sa.Column("e1rm", sa.Float(), server_default=sa.text("0"), nullable=False))
     op.add_column("sets", sa.Column("is_pr", sa.Boolean(), server_default=sa.text("false"), nullable=False))
     op.execute("UPDATE sets SET e1rm = CASE WHEN reps <= 1 THEN weight ELSE weight * (1 + reps / 30.0) END")
@@ -130,7 +126,6 @@ def upgrade() -> None:
         """
     )
 
-    # Postgres doesn't index foreign keys on its own.
     op.create_index("ix_workouts_owner_performed", "workouts", ["owner_id", "performed_at"])
     op.create_index("ix_workouts_visibility_performed", "workouts", ["visibility", "performed_at", "id"])
     op.create_index("ix_workout_exercises_workout_id", "workout_exercises", ["workout_id"])
@@ -152,7 +147,6 @@ def upgrade() -> None:
     )
     op.create_index("ix_refresh_tokens_user_id", "refresh_tokens", ["user_id"])
 
-    # Seed data that used to be inserted on every GET request.
     communities = sa.table("communities", sa.column("slug"), sa.column("name"), sa.column("description"))
     for slug, name, description in COMMUNITIES:
         op.execute(
@@ -185,8 +179,6 @@ def downgrade() -> None:
     op.drop_column("sets", "e1rm")
     op.drop_index("uq_exercises_owner_name", table_name="exercises")
     op.drop_index("uq_exercises_catalogue_name", table_name="exercises")
-    # Custom exercises can share a name across users, which the old global constraint forbids,
-    # so give them unique names rather than deleting anyone's workout history.
     op.execute("UPDATE exercises SET name = left(name, 70) || ' #' || id WHERE owner_id IS NOT NULL")
     op.create_unique_constraint("uq_exercises_name", "exercises", ["name"])
     op.drop_constraint("exercises_owner_id_fkey", "exercises", type_="foreignkey")

@@ -34,7 +34,6 @@ export async function logout() {
   const refreshToken = localStorage.getItem(REFRESH_KEY);
   clearSession();
   if (!refreshToken) return;
-  // Best effort: the local session is already gone even if this request fails.
   await fetch(`${API_URL}/logout`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

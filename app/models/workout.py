@@ -62,8 +62,6 @@ class Set(Base):
     set_number: Mapped[int] = mapped_column()
     reps: Mapped[int] = mapped_column()
     weight: Mapped[float] = mapped_column(Float)
-    # Both are derived, but stored so feeds and leaderboards can read them without
-    # replaying a lifter's whole history on every request. pr_service keeps them current.
     e1rm: Mapped[float] = mapped_column(Float, server_default=text("0"))
     is_pr: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
 

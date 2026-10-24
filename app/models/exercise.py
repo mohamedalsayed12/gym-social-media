@@ -3,7 +3,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
-# Matches the regions drawn on the frontend body map.
 MUSCLE_GROUPS = ("chest", "back", "shoulders", "arms", "legs", "core", "full_body")
 
 

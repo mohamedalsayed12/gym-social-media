@@ -12,7 +12,6 @@ export default function LikeButton({ workoutId, likes, likedByMe, onChange }) {
         : await api(`/workouts/${workoutId}/like`, { method: "POST" });
       onChange?.(updated);
     } catch {
-      /* keep the previous count when the request fails */
     } finally {
       setPending(false);
     }

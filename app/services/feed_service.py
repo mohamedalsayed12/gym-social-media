@@ -123,8 +123,6 @@ def list_feed(
     statement = select(Workout).where(visible)
 
     if exercise or muscle_group:
-        # EXISTS rather than a JOIN, so a workout with two matching exercises isn't returned twice
-        # and the query doesn't need DISTINCT, which would stop Postgres using the sort index.
         matches = (
             select(WorkoutExercise.id)
             .join(Exercise, WorkoutExercise.exercise_id == Exercise.id)
@@ -140,8 +138,6 @@ def list_feed(
     if performed_to is not None:
         statement = statement.where(Workout.performed_at <= performed_to)
     if cursor is not None:
-        # Keyset pagination: "older than the last row I saw". Unlike OFFSET, new posts arriving
-        # don't shift the pages, and deep pages cost the same as the first one.
         after_time, after_id = decode_cursor(cursor)
         statement = statement.where(tuple_(Workout.performed_at, Workout.id) < (after_time, after_id))
 

@@ -40,7 +40,6 @@ def resolve_exercise(db: Session, owner_id: int, name: str, muscle_group: str) -
     )
     if shared is not None:
         return shared
-    # ON CONFLICT covers two requests from the same lifter creating the same exercise at once.
     db.execute(
         insert(Exercise)
         .values(name=cleaned, muscle_group=muscle_group, owner_id=owner_id)
@@ -52,8 +51,6 @@ def resolve_exercise(db: Session, owner_id: int, name: str, muscle_group: str) -
 
 
 def _lock_owner(db: Session, owner_id: int) -> None:
-    # Serialises one lifter's workout writes so two saves can't both read the same history
-    # and leave stale PR flags. Other lifters are unaffected.
     db.execute(select(User.id).where(User.id == owner_id).with_for_update())
 
 
@@ -115,7 +112,6 @@ def update_workout(db: Session, workout: Workout, data: WorkoutUpdate) -> Workou
     if exercises is not None:
         touched |= _replace_exercises(db, workout, data.exercises)
     db.flush()
-    # Moving a workout to a different date can change records on either side of it.
     if exercises is not None or "performed_at" in changes:
         recompute_prs(db, workout.owner_id, touched)
     db.commit()
@@ -163,7 +159,6 @@ def _remove_photo(photo_name: str | None) -> None:
     try:
         get_storage().delete(photo_name)
     except Exception:
-        # The database change already committed; an orphaned file is cheaper than a failed request.
         logger.exception("Could not delete photo %s", photo_name)
 
 

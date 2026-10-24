@@ -9,7 +9,6 @@ WorkingDirectory=/home/fastapi/app
 Environment="PATH=/home/fastapi/app/.venv/bin"
 EnvironmentFile=/home/fastapi/app/.env
 ExecStartPre=/home/fastapi/app/.venv/bin/alembic upgrade head
-# --forwarded-allow-ips lets the app see the real client IP from nginx, which the login rate limit needs.
 ExecStart=/home/fastapi/app/.venv/bin/gunicorn -w 1 -k uvicorn_worker.UvicornWorker app.main:app --bind 127.0.0.1:8000 --forwarded-allow-ips 127.0.0.1
 Restart=on-failure
 

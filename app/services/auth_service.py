@@ -48,7 +48,7 @@ def revoke(db: Session, refresh_token: str) -> None:
     try:
         payload = decode_token(refresh_token, "refresh")
     except HTTPException:
-        return  # Expired or malformed tokens can't be used anyway.
+        return
     db.execute(
         update(RefreshToken)
         .where(RefreshToken.jti == payload.get("jti"), RefreshToken.revoked_at.is_(None))

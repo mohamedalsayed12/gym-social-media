@@ -6,8 +6,6 @@ on:
   pull_request:
 
 env:
-  # Throwaway credentials for the CI database only. Keeping them out of secrets means
-  # pull requests from forks, which can't read secrets, still run the full suite.
   DATABASE_HOSTNAME: localhost
   DATABASE_PORT: 5432
   DATABASE_USERNAME: postgres
@@ -82,8 +80,6 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
-      # Every pull request builds the image so a broken Dockerfile is caught before merge.
-      # Only pushes to main publish it.
       - uses: docker/build-push-action@v7
         with:
           context: .
@@ -95,7 +91,6 @@ jobs:
           cache-to: type=gha,mode=max
 
   deploy:
-    # Turn on by setting the repository variable DEPLOY_ENABLED=true once the secrets below exist.
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
     needs: [test, frontend, image]
     runs-on: ubuntu-latest
@@ -115,5 +110,4 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
       - name: Deploy
-        # The script is sent from this checkout, so the server always runs the version being deployed.
         run: ssh -i ~/.ssh/deploy_key "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" 'sudo bash -s' < deploy/deploy.sh

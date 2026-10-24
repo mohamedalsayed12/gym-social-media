@@ -49,7 +49,6 @@ class S3Storage:
         self.client.delete_object(Bucket=self.bucket, Key=key)
 
     def url(self, key: str) -> str:
-        # Signing happens locally, so this costs no network call per photo in a feed.
         return self.client.generate_presigned_url(
             "get_object",
             Params={"Bucket": self.bucket, "Key": key},

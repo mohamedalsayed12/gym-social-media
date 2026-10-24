@@ -32,7 +32,6 @@ def _to_out(db: Session, user: User, communities: list[Community]) -> list[Commu
             )
         )
     )
-    # Rankings are only worked out for communities this user is in.
     standings = overall_standings(db, user.id, sorted(joined))
     listed = []
     for community in communities:
